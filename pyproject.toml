@@ -1,0 +1,38 @@
+[project]
+name = "mathlore-forge"
+version = "0.1.0"
+description = "Durable, self-improving AI forge system for Mathlore written in Mathlingua"
+readme = "README.md"
+authors = [
+    { name = "Dominic Kramer", email = "DominicKramer@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "google-antigravity>=0.1.16",
+    "dbos>=2.31.0",
+    "pydantic>=2.10.0",
+    "python-dotenv>=1.0.0",
+    "sqlalchemy>=2.0.0",
+    "rich>=13.0.0",
+    "typer>=0.15.0",
+    "pyyaml>=6.0.0",
+    "opentelemetry-api>=1.28.0",
+    "opentelemetry-sdk>=1.28.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[project.scripts]
+mathlore-forge = "mathlore_forge.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.8.19,<0.9.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

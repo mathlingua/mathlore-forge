@@ -1,0 +1,37 @@
+# Mathlore Forge Default Configuration
+
+paths:
+  mathlore_repo: "../../mathlore"
+  mlg_bin: "../../mathlingua/target/release/mlg"
+  skills_dir: "./skills"
+  traces_dir: "./traces"
+  goldens_dir: "./goldens"
+  flywheel_dir: "./flywheel"
+  db_path: "mathlore_forge.sqlite"
+
+models:
+  planner: "gemini-3.8-flash"
+  author: "gemini-3.8-flash"
+  reflection: "gemini-3.8-flash"
+
+execution:
+  mode: "interactive"      # "interactive" or "auto"
+  max_iterations: 3        # for auto mode
+  serial_authoring: true   # serial execution of TODO items to prevent collision
+  max_compile_retries: 5   # self-repair attempts per item if mlg check fails
+
+guardrails:
+  enforce_citations: true
+  reputable_sources:
+    - "textbook"
+    - "peer-reviewed paper"
+    - "nlab"
+    - "stanford encyclopedia of philosophy"
+    - "mathworld"
+    - "standard reference monograph"
+  flag_mathlingua_gaps: true
+
+telemetry:
+  enable_console_summary: true
+  enable_file_exporter: true
+  traces_dir: "./traces"
