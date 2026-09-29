@@ -1,0 +1,7 @@
+{
+  "name": "AlgebraGoldens",
+  "version": "0",
+  "margin": 80,
+  "formatOnCheck": true,
+  "outputDir": "docs"
+}

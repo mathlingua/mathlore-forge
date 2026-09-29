@@ -10,6 +10,7 @@ from rich.console import Console
 
 from mathlore_forge.agents.mathlingua_agent import MathlinguaAgent, create_mathlingua_agent
 from mathlore_forge.config import load_config
+from mathlore_forge.goldens.cli import app as goldens_app
 from mathlore_forge.mlg.client import MlgClient
 
 app = typer.Typer(
@@ -17,6 +18,7 @@ app = typer.Typer(
     help="Durable, self-improving AI forge system for Mathlore written in Mathlingua.",
     no_args_is_help=True,
 )
+app.add_typer(goldens_app, name="goldens", help="Author, run, and inspect Mathlingua agent golden tests.")
 console = Console()
 
 

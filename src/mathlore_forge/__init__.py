@@ -1,5 +1,6 @@
 """Mathlore Forge: Durable, self-improving AI forge system for Mathlore."""
 
+from mathlore_forge import goldens
 from mathlore_forge.agents.mathlingua_agent import (
     DEFAULT_MATHLINGUA_SYSTEM_INSTRUCTIONS,
     MathlinguaAgent,
@@ -22,5 +23,7 @@ __all__ = [
     "MlgClient",
     "create_mathlingua_agent",
     "create_mathlingua_subagent_config",
+    "goldens",
     "load_config",
 ]
+

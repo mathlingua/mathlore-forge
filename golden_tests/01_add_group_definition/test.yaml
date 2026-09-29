@@ -1,0 +1,39 @@
+id: 01_add_group_definition
+name: "Author Group Definition"
+description: "Verifies the agent correctly authors a new \\group.abelian declaration into 01_monoids.mlg after the group definition."
+tags:
+  - algebra
+  - author-new
+prompt: >-
+  In content/07_algebra/01_monoids.mlg, insert the declaration of an abelian group ([\group.abelian])
+  after the item with ID 'e4d7371d-29bd-431f-ab09-e114fe89e5cf'. Set 'Declares: A is \group' and
+  provide a Documented section with called: "abelian group". Do not fabricate an ID on the new item.
+  Run mlg_check to validate the syntax.
+
+scaffold:
+  from_dir: scaffold
+  include_default_mlg_json: true
+
+expectations:
+  compiler:
+    clean: true
+
+  files_created: []
+  files_modified:
+    - content/07_algebra/01_monoids.mlg
+  files_deleted: []
+
+  file_assertions:
+    - path: content/07_algebra/01_monoids.mlg
+      should_exist: true
+      contains:
+        - "\\group.abelian"
+        - "Declares:"
+
+  trajectory:
+    tools:
+      - name: mlg_check
+        must_call: true
+      - name: insert_item_after
+        must_call: true
+    forbidden_tools: []

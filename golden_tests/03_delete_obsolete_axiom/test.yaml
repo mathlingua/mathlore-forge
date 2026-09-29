@@ -1,0 +1,42 @@
+id: 03_delete_obsolete_axiom
+name: "Delete Obsolete Axiom and File"
+description: "Verifies the agent deletes an obsolete contradictory axiom from axioms.mlg and removes the deprecated file obsolete.mlg."
+tags:
+  - logic
+  - delete-code
+prompt: >-
+  Please do the following maintenance tasks:
+  1. In content/01_logic/axioms.mlg, delete the obsolete item with ID '99999999-9999-9999-9999-999999999999'.
+  2. Delete the obsolete file content/01_logic/obsolete.mlg entirely.
+  3. Run mlg_check to ensure the collection remains valid.
+
+scaffold:
+  from_dir: scaffold
+  include_default_mlg_json: true
+
+expectations:
+  compiler:
+    clean: true
+
+  files_created: []
+  files_modified:
+    - content/01_logic/axioms.mlg
+  files_deleted:
+    - content/01_logic/obsolete.mlg
+
+  file_assertions:
+    - path: content/01_logic/axioms.mlg
+      should_exist: true
+      contains:
+        - "law of identity"
+      not_contains:
+        - "OBSOLETE_CONTRADICTORY_AXIOM"
+        - "99999999-9999-9999-9999-999999999999"
+
+    - path: content/01_logic/obsolete.mlg
+      should_exist: false
+
+  trajectory:
+    tools:
+      - name: mlg_check
+        must_call: true

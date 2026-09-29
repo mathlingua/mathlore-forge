@@ -1,0 +1,19 @@
+Title: "Rings and Subrings"
+Id: "12345678-1234-1234-1234-123456789abc"
+
+
+[\ring]
+Declares: R
+Documented:
+. called: "ring"
+. description: "A ring structure."
+Id: "aaaa0001-bbbb-cccc-dddd-eeeeffff0001"
+
+
+Theorem:
+given: R is \ring
+then:
+. TODO_INCOMPLETE_THEOREM
+Documented:
+. called: "Incomplete theorem"
+Id: "aaaa0002-bbbb-cccc-dddd-eeeeffff0002"

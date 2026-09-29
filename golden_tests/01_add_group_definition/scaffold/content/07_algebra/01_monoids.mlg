@@ -1,0 +1,17 @@
+Title: "Monoids and Groups"
+Id: "f1a23456-789a-4bcd-ef01-23456789abcd"
+
+
+[\set]
+Declares: X
+Documented:
+. called: "set"
+Id: "a0759217-e1f6-412c-982a-0038cd17a3a1"
+
+
+[\group]
+Declares: G is \set
+Documented:
+. called: "group"
+. description: "A group structure."
+Id: "e4d7371d-29bd-431f-ab09-e114fe89e5cf"

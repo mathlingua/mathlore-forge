@@ -1,0 +1,44 @@
+id: 02_edit_subring_theorem
+name: "Edit Incomplete Theorem"
+description: "Verifies the agent edits an existing incomplete Theorem by replacing the placeholder with valid Mathlingua clauses."
+tags:
+  - algebra
+  - edit-existing
+prompt: >-
+  In content/07_algebra/rings.mlg, locate the item with ID 'aaaa0002-bbbb-cccc-dddd-eeeeffff0002'.
+  It contains an invalid placeholder 'TODO_INCOMPLETE_THEOREM'. Replace this item with a valid
+  Theorem stating:
+  Theorem:
+  given: R is \ring
+  then:
+  . R is? \ring
+  Documented:
+  . called: "Ring reflexivity"
+  Run mlg_check to ensure 0 compiler diagnostics.
+
+scaffold:
+  from_dir: scaffold
+  include_default_mlg_json: true
+
+expectations:
+  compiler:
+    clean: true
+
+  files_created: []
+  files_modified:
+    - content/07_algebra/rings.mlg
+  files_deleted: []
+
+  file_assertions:
+    - path: content/07_algebra/rings.mlg
+      should_exist: true
+      contains:
+        - "Ring reflexivity"
+        - "R is? \\ring"
+      not_contains:
+        - "TODO_INCOMPLETE_THEOREM"
+
+  trajectory:
+    tools:
+      - name: mlg_check
+        must_call: true

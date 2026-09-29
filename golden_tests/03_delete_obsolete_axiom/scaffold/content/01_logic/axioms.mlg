@@ -1,0 +1,27 @@
+Title: "Logic Axioms"
+Id: "11111111-0000-0000-0000-000000000001"
+
+
+[\statement]
+Declares: P
+Documented:
+. called: "propositional statement"
+Id: "11111111-0000-0000-0000-000000000002"
+
+
+Axiom:
+given: P is \statement
+then:
+. P is? \statement
+Documented:
+. called: "law of identity"
+Id: "11111111-0000-0000-0000-000000000003"
+
+
+Axiom:
+given: P is \statement
+then:
+. P is? \statement
+Documented:
+. called: "OBSOLETE_CONTRADICTORY_AXIOM"
+Id: "99999999-9999-9999-9999-999999999999"
