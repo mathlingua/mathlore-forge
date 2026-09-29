@@ -15,8 +15,10 @@ from google.antigravity import (
 )
 from google.antigravity.hooks import policy
 
-from mathlore_forge.config import MathloreConfig, load_config
+from mathlore_forge.config import MathloreConfig, ensure_env_loaded, load_config
 from mathlore_forge.tools.mathlingua_tools import MathlinguaToolkit
+
+ensure_env_loaded()
 
 DEFAULT_MATHLINGUA_SYSTEM_INSTRUCTIONS = """\
 You are an expert Mathlingua authoring agent. Your role is to formulate mathematically rigorous, \
@@ -114,10 +116,12 @@ def create_mathlingua_agent(
     model: str | types.ModelTarget | None = None,
     api_key: str | None = None,
     system_instructions: str | None = None,
+    tools: list[Callable[..., Any]] | None = None,
     extra_tools: list[Callable[..., Any]] | None = None,
     policies: Sequence[Any] | None = None,
     capabilities: CapabilitiesConfig | None = None,
     workspaces: list[str] | None = None,
+    hooks: Sequence[Any] | None = None,
     config: MathloreConfig | None = None,
     **kwargs: Any,
 ) -> Agent:
@@ -131,10 +135,12 @@ def create_mathlingua_agent(
         model: Model target to use. Defaults to `gemini-3.8-flash`.
         api_key: Optional Gemini API key. Defaults to `GEMINI_API_KEY` env var.
         system_instructions: Optional custom system instructions. Defaults to Mathlingua author instructions.
+        tools: Optional explicit tools list overriding the default toolkit tools.
         extra_tools: Optional additional tools to equip the agent with.
         policies: Safety policies. Defaults to `[policy.allow_all()]` so authoring tools execute smoothly.
         capabilities: Optional capabilities configuration.
         workspaces: Optional workspace directories.
+        hooks: Optional hooks passed to LocalAgentConfig.
         config: Optional pre-loaded MathloreConfig.
         **kwargs: Additional parameters passed to LocalAgentConfig.
 
@@ -158,7 +164,7 @@ def create_mathlingua_agent(
 
     # 1. Initialize toolkit bound strictly to resolved_content_root and mlg_bin
     toolkit = MathlinguaToolkit(content_root=resolved_content_root, mlg_bin=resolved_mlg_bin)
-    agent_tools: list[Callable[..., Any]] = toolkit.get_tools()
+    agent_tools: list[Callable[..., Any]] = list(tools) if tools is not None else toolkit.get_tools()
     if extra_tools:
         agent_tools.extend(extra_tools)
 
@@ -193,6 +199,7 @@ def create_mathlingua_agent(
         api_key=resolved_api_key,
         capabilities=capabilities,
         policies=policies,
+        hooks=list(hooks) if hooks else None,
         workspaces=agent_workspaces,
         **kwargs,
     )

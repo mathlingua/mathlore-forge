@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from mathlore_forge.agents.mathlingua_agent import create_mathlingua_agent
+from mathlore_forge.config import ensure_env_loaded
 from mathlore_forge.goldens.evaluator import Evaluator, EvaluationReport
 from mathlore_forge.goldens.models import GoldenTestCase
 from mathlore_forge.goldens.sandbox import FileDiffSummary
@@ -325,9 +326,11 @@ class MathloreForgeAgentAdapter(AgentAdapter):
         self,
         model: str | None = None,
         skills_dir: Path | str | None = None,
+        api_key: str | None = None,
     ):
         self.model = model
         self.skills_dir = Path(skills_dir).resolve() if skills_dir else None
+        self.api_key = api_key
 
     async def run(
         self,
@@ -336,6 +339,7 @@ class MathloreForgeAgentAdapter(AgentAdapter):
         trajectory: Trajectory,
         timeout_seconds: float = 180.0,
     ) -> str:
+        ensure_env_loaded()
         toolkit = MathlinguaToolkit(content_root=workspace_dir)
         raw_tools = toolkit.get_tools()
         wrapped_tools = [_wrap_tool_for_trajectory(t, trajectory) for t in raw_tools]
@@ -361,16 +365,16 @@ class MathloreForgeAgentAdapter(AgentAdapter):
             pass
 
         # Build agent using mathlore-forge's create_mathlingua_agent
+        import os
+        resolved_key = self.api_key or os.getenv("GEMINI_API_KEY")
         agent = create_mathlingua_agent(
             content_root=workspace_dir,
             skills_dir=self.skills_dir,
             model=self.model,
-            extra_tools=[],
+            api_key=resolved_key,
+            tools=wrapped_tools,
             hooks=hooks_list if hooks_list else None,
         )
-
-        if hasattr(agent, "config") and hasattr(agent.config, "tools"):
-            agent.config.tools = wrapped_tools
 
         start_turn = time.perf_counter()
         try:

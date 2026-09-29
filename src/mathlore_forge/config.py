@@ -6,8 +6,32 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any
+from dotenv import find_dotenv, load_dotenv
 import yaml
 from pydantic import BaseModel, Field
+
+
+def ensure_env_loaded() -> None:
+    """Loads environment variables from .env files if not already loaded."""
+    # 1. Search upwards from cwd
+    found = find_dotenv(usecwd=True)
+    if found:
+        load_dotenv(found)
+
+    # 2. Check forge repository root explicitly
+    forge_dir = Path(__file__).resolve().parent.parent.parent
+    repo_env = forge_dir / ".env"
+    if repo_env.is_file():
+        load_dotenv(repo_env)
+
+    # 3. Check parent workspace directory
+    parent_env = forge_dir.parent / ".env"
+    if parent_env.is_file():
+        load_dotenv(parent_env)
+
+
+# Automatically ensure .env variables are loaded upon module import
+ensure_env_loaded()
 
 
 def _resolve_explicit_content_root(hint: str | Path | None = None) -> Path | None:
@@ -24,21 +48,37 @@ def _resolve_explicit_content_root(hint: str | Path | None = None) -> Path | Non
 
 def _find_mlg_bin(hint: str | Path | None = None) -> str:
     """Locates the `mlg` compiler binary without searching for mathlore content."""
-    if hint:
-        return str(hint)
+    forge_dir = Path(__file__).resolve().parent.parent.parent
+
+    if hint and hint != "mlg":
+        hint_path = Path(hint)
+        if hint_path.is_file() and os.access(hint_path, os.X_OK):
+            return str(hint_path.resolve())
+        rel_path = (forge_dir / hint).resolve()
+        if rel_path.is_file() and os.access(rel_path, os.X_OK):
+            return str(rel_path)
+        which_hint = shutil.which(str(hint))
+        if which_hint:
+            return which_hint
 
     env_bin = os.getenv("MLG_BIN")
     if env_bin:
-        return env_bin
+        env_path = Path(env_bin)
+        if env_path.is_file() and os.access(env_path, os.X_OK):
+            return str(env_path.resolve())
+        which_env = shutil.which(env_bin)
+        if which_env:
+            return which_env
 
     which_mlg = shutil.which("mlg")
     if which_mlg:
         return which_mlg
 
     home = Path.home()
-    forge_dir = Path(__file__).resolve().parent.parent.parent
     candidates = [
         home / ".local" / "bin" / "mlg",
+        forge_dir.parent / "mathlingua" / "target" / "release" / "mlg",
+        forge_dir.parent / "mathlingua" / "target" / "debug" / "mlg",
         forge_dir / ".." / "mathlingua" / "target" / "release" / "mlg",
         forge_dir / ".." / "mathlingua" / "target" / "debug" / "mlg",
     ]

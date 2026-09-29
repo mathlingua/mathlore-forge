@@ -7,7 +7,10 @@ from mathlore_forge.agents.mathlingua_agent import (
     create_mathlingua_agent,
     create_mathlingua_subagent_config,
 )
-from mathlore_forge.config import MathloreConfig, load_config
+from mathlore_forge.config import MathloreConfig, ensure_env_loaded, load_config
+
+ensure_env_loaded()
+
 from mathlore_forge.mlg.client import CheckReport, Diagnostic, MlgClient
 from mathlore_forge.tools.mathlingua_tools import MathlinguaToolkit
 
@@ -23,6 +26,7 @@ __all__ = [
     "MlgClient",
     "create_mathlingua_agent",
     "create_mathlingua_subagent_config",
+    "ensure_env_loaded",
     "goldens",
     "load_config",
 ]

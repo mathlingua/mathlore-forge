@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
+from mathlore_forge.config import ensure_env_loaded
 from mathlore_forge.goldens.author import scaffold_new_test_case
 from mathlore_forge.goldens.loader import discover_test_cases, load_test_case_from_path
 from mathlore_forge.goldens.runner import (
@@ -23,6 +24,8 @@ from mathlore_forge.goldens.runner import (
 )
 from mathlore_forge.goldens.session import SessionManager
 
+ensure_env_loaded()
+
 app = typer.Typer(
     name="goldens",
     help="CLI for authoring, running, and inspecting Mathlingua agent golden tests.",
@@ -31,7 +34,11 @@ app = typer.Typer(
 console = Console()
 
 
-def _resolve_adapter(agent_choice: str, model: str | None = None) -> AgentAdapter:
+def _resolve_adapter(
+    agent_choice: str,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> AgentAdapter:
     """Instantiates the requested agent adapter."""
     choice = agent_choice.strip().lower()
     if choice == "mock":
@@ -39,7 +46,7 @@ def _resolve_adapter(agent_choice: str, model: str | None = None) -> AgentAdapte
     elif choice == "simulated":
         return SimulatedAgentAdapter()
     elif choice in ("forge", "mathlore-forge", "default"):
-        return MathloreForgeAgentAdapter(model=model)
+        return MathloreForgeAgentAdapter(model=model, api_key=api_key)
     elif ":" in agent_choice:
         # Custom import "module.path:factory_function"
         mod_name, func_name = agent_choice.split(":", 1)
@@ -52,7 +59,7 @@ def _resolve_adapter(agent_choice: str, model: str | None = None) -> AgentAdapte
         return factory()
     else:
         # Default fallback
-        return MathloreForgeAgentAdapter(model=model)
+        return MathloreForgeAgentAdapter(model=model, api_key=api_key)
 
 
 @app.command("run")
@@ -76,6 +83,10 @@ def run_tests_cmd(
     model: Annotated[
         Optional[str],
         typer.Option("--model", "-m", help="LLM model override for the agent."),
+    ] = None,
+    api_key: Annotated[
+        Optional[str],
+        typer.Option("--api-key", "-k", help="Gemini API key override."),
     ] = None,
     auto_cleanup: Annotated[
         bool,
@@ -109,7 +120,7 @@ def run_tests_cmd(
     )
 
     session_mgr = SessionManager(runs_dir=runs_dir)
-    adapter = _resolve_adapter(agent, model=model)
+    adapter = _resolve_adapter(agent, model=model, api_key=api_key)
     runner = TestRunner(session_manager=session_mgr)
 
     total = len(cases)

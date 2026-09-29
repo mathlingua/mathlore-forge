@@ -9,9 +9,11 @@ import typer
 from rich.console import Console
 
 from mathlore_forge.agents.mathlingua_agent import MathlinguaAgent, create_mathlingua_agent
-from mathlore_forge.config import load_config
+from mathlore_forge.config import ensure_env_loaded, load_config
 from mathlore_forge.goldens.cli import app as goldens_app
 from mathlore_forge.mlg.client import MlgClient
+
+ensure_env_loaded()
 
 app = typer.Typer(
     name="mathlore-forge",
@@ -58,6 +60,12 @@ def author(
         "-m",
         help="Gemini model name to use (defaults to gemini-3.8-flash).",
     ),
+    api_key: Optional[str] = typer.Option(
+        None,
+        "--api-key",
+        "-k",
+        help="Gemini API key override.",
+    ),
 ) -> None:
     """Author Mathlingua content and update collection files."""
     console.print(f"[bold cyan]🚀 Initializing Mathlingua Agent for `{content_root}`...[/bold cyan]")
@@ -72,6 +80,7 @@ def author(
         agent = create_mathlingua_agent(
             content_root=content_root,
             model=model,
+            api_key=api_key,
         )
         async with agent:
             console.print(f"[bold green]✍ Prompt:[/bold green] {full_prompt}")

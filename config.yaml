@@ -2,7 +2,7 @@
 
 paths:
   mathlore_repo: "../../mathlore"
-  mlg_bin: "../../mathlingua/target/release/mlg"
+  mlg_bin: "mlg"
   skills_dir: "./skills"
   traces_dir: "./traces"
   goldens_dir: "./goldens"
