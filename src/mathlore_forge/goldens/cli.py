@@ -287,6 +287,8 @@ def diff_cmd(
 def trajectory_cmd(
     session_id: Annotated[str, typer.Argument(help="Session ID (e.g. 'session-1' or '1').")],
     runs_dir: Annotated[Path, typer.Option("--runs-dir", "-r")] = Path("./runs"),
+    raw: Annotated[bool, typer.Option("--raw", help="Output raw unrendered markdown.")] = False,
+    as_json: Annotated[bool, typer.Option("--json", help="Output full trajectory JSON.")] = False,
 ) -> None:
     """Shows the recorded execution trajectory (thoughts, tools, subagents) for a session."""
     mgr = SessionManager(runs_dir=runs_dir)
@@ -295,12 +297,25 @@ def trajectory_cmd(
         console.print(f"[red]Session '{session_id}' not found.[/red]")
         raise typer.Exit(code=1)
 
+    if as_json:
+        json_file = s_dir / "trajectory.json"
+        if json_file.is_file():
+            print(json_file.read_text(encoding="utf-8"))
+            return
+        console.print("[dim]No trajectory JSON found for this session.[/dim]")
+        return
+
     md_file = s_dir / "trajectory.md"
     if md_file.is_file():
-        from rich.markdown import Markdown
-        console.print(Markdown(md_file.read_text(encoding="utf-8")))
+        text = md_file.read_text(encoding="utf-8")
+        if raw:
+            print(text)
+        else:
+            from rich.markdown import Markdown
+            console.print(Markdown(text))
     else:
         console.print("[dim]No trajectory markdown found for this session.[/dim]")
+
 
 
 @app.command("clean")

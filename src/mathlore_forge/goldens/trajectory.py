@@ -183,10 +183,10 @@ class Trajectory(BaseModel):
                 if call.error:
                     lines.append(f"**Error**: `{call.error}`")
                 elif call.result is not None:
-                    res_str = str(call.result)
-                    if len(res_str) > 1000:
-                        res_str = res_str[:1000] + "... [truncated]"
-                    lines.append(f"**Result**:\n```text\n{res_str}\n```")
+                    if isinstance(call.result, (dict, list)):
+                        lines.append(f"**Result**:\n```json\n{json.dumps(call.result, indent=2, default=str)}\n```")
+                    else:
+                        lines.append(f"**Result**:\n```text\n{call.result}\n```")
                 lines.append("")
 
         if self.subagent_calls:
@@ -196,10 +196,10 @@ class Trajectory(BaseModel):
                 if sub.prompt:
                     lines.append(f"**Prompt**: {sub.prompt}")
                 if sub.result is not None:
-                    res_str = str(sub.result)
-                    if len(res_str) > 1000:
-                        res_str = res_str[:1000] + "... [truncated]"
-                    lines.append(f"**Output**:\n```text\n{res_str}\n```")
+                    if isinstance(sub.result, (dict, list)):
+                        lines.append(f"**Output**:\n```json\n{json.dumps(sub.result, indent=2, default=str)}\n```")
+                    else:
+                        lines.append(f"**Output**:\n```text\n{sub.result}\n```")
                 lines.append("")
 
         if self.final_output:

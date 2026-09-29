@@ -141,7 +141,7 @@ class MockAgentAdapter(AgentAdapter):
                 target_file.write_text(new_content, encoding="utf-8")
                 trajectory.record_tool_call(
                     name="write_content_file",
-                    args={"file_path": "content/example.mlg"},
+                    args={"file_path": "content/example.mlg", "content": new_content},
                     result="Updated file",
                     duration_ms=8.0,
                 )
@@ -286,11 +286,12 @@ class SimulatedAgentAdapter(AgentAdapter):
                 it for it in items
                 if "99999999-9999-9999-9999-999999999999" not in it and "OBSOLETE" not in it
             ]
-            target.write_text("\n\n\n".join(cleaned_items).strip() + "\n", encoding="utf-8")
+            new_content = "\n\n\n".join(cleaned_items).strip() + "\n"
+            target.write_text(new_content, encoding="utf-8")
 
             trajectory.record_tool_call(
                 name="write_content_file",
-                args={"file_path": rel_file, "content": "..."},
+                args={"file_path": rel_file, "content": new_content},
                 result="Updated axioms.mlg without obsolete axiom",
                 duration_ms=18.0,
             )
