@@ -70,12 +70,21 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
   1. Open the [Google Cloud Console Credentials Page](https://console.cloud.google.com/apis/credentials).
   2. If you haven't configured the **OAuth consent screen** yet:
      - Go to **APIs & Services** > **OAuth consent screen**.
-     - Select **External** (or **Internal** if using Google Workspace) and click **Create**.
-     - Set **App name**: `Mathlore Forge`.
-     - Set **User support email**: `DominicKramer@gmail.com`.
-     - Set **Developer contact email**: `DominicKramer@gmail.com`.
-     - Under **Test users**, add `DominicKramer@gmail.com`.
-     - Click **Save and Continue**.
+     - **User Type / Audience**: Select **External** and click **Create**.
+       > **Why External?** The **Internal** option requires a Google Workspace organization account with a custom domain. For standard `@gmail.com` accounts, Google disables or disallows the Internal option. Selecting **External** keeps your app in **Testing** status—meaning only users explicitly listed under **Test users** are permitted to log in, and you **do not** need Google verification or review.
+     - **OAuth Consent Screen Details**:
+       - Set **App name**: `Mathlore Forge`.
+       - Set **User support email**: `DominicKramer@gmail.com`.
+       - Set **Developer contact email**: `DominicKramer@gmail.com`.
+       - Click **Save and Continue**.
+     - **Scopes**:
+       - No sensitive scopes are required (standard `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` are added automatically).
+       - Click **Save and Continue**.
+     - **Test users**:
+       - Click **+ ADD USERS**.
+       - Enter `DominicKramer@gmail.com` and click **Add**.
+       - Click **Save and Continue**.
+     - Click **Back to Dashboard**.
   3. Create the OAuth Client ID:
      - Go to **APIs & Services** > **Credentials**.
      - Click **+ CREATE CREDENTIALS** > **OAuth client ID**.
