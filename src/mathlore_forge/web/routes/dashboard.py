@@ -50,6 +50,17 @@ async def login_page(request: Request, error: str | None = None) -> Response:
     )
 
 
+def _get_auth_redirect_uri(request: Request) -> str:
+    """Build the OAuth redirect URI, ensuring HTTPS behind Cloud Run and reverse proxies."""
+    url = request.url_for("auth_callback")
+    proto = request.headers.get("x-forwarded-proto")
+    if proto:
+        url = url.replace(scheme=proto)
+    elif "run.app" in request.url.netloc:
+        url = url.replace(scheme="https")
+    return str(url)
+
+
 @router.get("/auth/google")
 async def auth_google(request: Request) -> Response:
     """Redirects to Google OAuth authorization endpoint."""
@@ -71,7 +82,7 @@ async def auth_google(request: Request) -> Response:
             detail="GOOGLE_CLIENT_ID is not configured. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
         )
 
-    redirect_uri = str(request.url_for("auth_callback"))
+    redirect_uri = _get_auth_redirect_uri(request)
     google_auth_url = (
         "https://accounts.google.com/o/oauth2/v2/auth?"
         f"client_id={GOOGLE_CLIENT_ID}&"
@@ -95,7 +106,7 @@ async def auth_callback(request: Request, code: str | None = None, error: str | 
             status_code=400,
         )
 
-    redirect_uri = str(request.url_for("auth_callback"))
+    redirect_uri = _get_auth_redirect_uri(request)
     try:
         user_info = await exchange_google_code(code, redirect_uri)
     except HTTPException as exc:

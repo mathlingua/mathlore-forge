@@ -168,7 +168,14 @@ def serve(
     """Start the Mathlore Forge Web Dashboard and Webhook server."""
     import uvicorn
     console.print(f"[bold green]🚀 Starting Mathlore Forge Web Dashboard on http://{host}:{port}...[/bold green]")
-    uvicorn.run("mathlore_forge.web.app:app", host=host, port=port, reload=reload)
+    uvicorn.run(
+        "mathlore_forge.web.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        proxy_headers=True,
+        forwarded_allow_ips="*",
+    )
 
 
 @app.command()
