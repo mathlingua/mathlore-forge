@@ -437,6 +437,13 @@ In production, Mathlore Forge runs on **Google Cloud Platform (Cloud Run)** prov
 - **No Manual Intervention**: Opening abstract issues, leaving feedback comments, commenting `/forge execute`, and commenting `/forge approve` on GitHub works completely automatically.
 - **Secure Authentication**: The web dashboard is secured by Google OAuth 2.0 and strictly limited to `DominicKramer@gmail.com`.
 
+#### Interactive Guided Deployment:
+You can deploy everything automatically using the interactive script:
+```bash
+./deploy.sh
+```
+The script steps through all requirements, previews every command before execution, and asks for your confirmation at each step.
+
 For full step-by-step instructions on deploying to GCP, see [**`DEPLOYMENT.md`**](DEPLOYMENT.md).
 
 ---

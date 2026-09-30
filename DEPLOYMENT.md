@@ -20,6 +20,14 @@ All infrastructure is defined declaratively under [`infra/terraform/`](infra/ter
 - **Cloud Run Service (`mathlore-forge-web`)**: Auto-scaling (0–5 instances) web dashboard and webhook receiver with health checks.
 - **Cloud Run Job (`mathlore-forge-worker`)**: Dedicated 24-hour agent execution worker for complex authoring tasks.
 
+> [!TIP]
+> **Recommended: Interactive Automated Deployment Script**
+> We provide a guided, step-by-step deployment script [`deploy.sh`](deploy.sh) that implements this entire manual interactively:
+> ```bash
+> ./deploy.sh
+> ```
+> At each step, it prints clear instructions, prompts for your project credentials with sensible defaults, displays the exact commands about to run, and asks for your confirmation before executing them. It saves configuration state in `.deploy_config` so you can safely re-run it at any time to resume or update.
+
 ---
 
 ## Part 1: Initial Deployment Step-by-Step
