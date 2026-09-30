@@ -1,0 +1,19 @@
+# Ignore virtual environments and cache
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore local configuration and secrets
+.env
+.deploy_config
+*.sqlite
+runs/
+
+# Ignore OS metadata
+.DS_Store

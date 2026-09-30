@@ -21,7 +21,7 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8080
 
 # Copy dependency specifications
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install Python dependencies into virtualenv
 RUN uv sync --frozen --no-install-project
