@@ -18,7 +18,7 @@ All infrastructure is defined declaratively under [`infra/terraform/`](infra/ter
 - **Secret Manager**: Secure secret slots for API keys and OAuth credentials.
 - **Artifact Registry**: Docker repository storing versioned container images.
 - **Cloud Run Service (`mathlore-forge-web`)**: Auto-scaling (0–5 instances) web dashboard and webhook receiver with health checks.
-- **Cloud Run Job (`mathlore-forge-worker`)**: Dedicated 24-hour agent execution worker for complex authoring tasks.
+- **Cloud Run Job (`mathlore-forge-worker`)**: Dedicated agent execution worker for complex authoring tasks (default timeout: 10 minutes / 600s, easily increased via `worker_timeout`).
 
 > [!TIP]
 > **Recommended: Interactive Automated Deployment Script**
@@ -172,7 +172,7 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
   3. The Secret Manager secret slots.
   4. The Cloud Run Service (`mathlore-forge-web`) configured with auto-scaling (0 to 5) and startup health probes.
   5. Public invoker access so GitHub can deliver webhooks.
-  6. The Cloud Run Job (`mathlore-forge-worker`) with a 24-hour execution timeout.
+  6. The Cloud Run Job (`mathlore-forge-worker`) with a 10-minute execution timeout (configurable via `worker_timeout`).
   7. **Outputs your live Production URLs**:
      ```
      Outputs:

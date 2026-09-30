@@ -202,7 +202,7 @@ resource "google_cloud_run_v2_job" "worker_job" {
     template {
       service_account = google_service_account.forge_sa.email
       max_retries     = 1
-      timeout         = "86400s" # 24 hours
+      timeout         = var.worker_timeout # Defaults to 10 minutes (600s)
 
       containers {
         image   = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.repo.name}/app:${var.image_tag}"

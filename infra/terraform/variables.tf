@@ -26,3 +26,9 @@ variable "allowed_github_author" {
   type        = string
   default     = "DominicKramer"
 }
+
+variable "worker_timeout" {
+  description = "Execution timeout for the Cloud Run worker job (default '600s' for 10 minutes)."
+  type        = string
+  default     = "600s"
+}

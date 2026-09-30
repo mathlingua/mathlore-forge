@@ -249,6 +249,7 @@ load_config() {
     ALLOWED_GITHUB_AUTHOR="${ALLOWED_GITHUB_AUTHOR:-DominicKramer}"
     GCP_REGION="${GCP_REGION:-us-central1}"
     IMAGE_TAG="${IMAGE_TAG:-latest}"
+    WORKER_TIMEOUT="${WORKER_TIMEOUT:-600s}"
 }
 
 save_config() {
@@ -258,6 +259,7 @@ save_config() {
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
 GCP_REGION="${GCP_REGION:-us-central1}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
+WORKER_TIMEOUT="${WORKER_TIMEOUT:-600s}"
 ALLOWED_ADMIN_EMAIL="${ALLOWED_ADMIN_EMAIL:-DominicKramer@gmail.com}"
 ALLOWED_GITHUB_AUTHOR="${ALLOWED_GITHUB_AUTHOR:-DominicKramer}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
@@ -522,6 +524,7 @@ cat <<EOF > "$TFVARS_FILE"
 project_id            = "${GCP_PROJECT_ID}"
 region                = "${GCP_REGION}"
 image_tag             = "${IMAGE_TAG}"
+worker_timeout        = "${WORKER_TIMEOUT:-600s}"
 allowed_admin_email   = "${ALLOWED_ADMIN_EMAIL}"
 allowed_github_author = "${ALLOWED_GITHUB_AUTHOR}"
 EOF
