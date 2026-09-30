@@ -250,6 +250,7 @@ load_config() {
     GCP_REGION="${GCP_REGION:-us-central1}"
     IMAGE_TAG="${IMAGE_TAG:-latest}"
     WORKER_TIMEOUT="${WORKER_TIMEOUT:-600s}"
+    TF_CMD="${TF_CMD:-terraform}"
 }
 
 save_config() {
@@ -260,6 +261,7 @@ GCP_PROJECT_ID="${GCP_PROJECT_ID:-}"
 GCP_REGION="${GCP_REGION:-us-central1}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-600s}"
+TF_CMD="${TF_CMD:-terraform}"
 ALLOWED_ADMIN_EMAIL="${ALLOWED_ADMIN_EMAIL:-DominicKramer@gmail.com}"
 ALLOWED_GITHUB_AUTHOR="${ALLOWED_GITHUB_AUTHOR:-DominicKramer}"
 GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
@@ -283,10 +285,10 @@ load_config
 # STEP 1: Verify Prerequisites & Authentication
 # ------------------------------------------------------------------------------
 print_step "1" "Verify CLI Tools & Authentication"
-print_info "Checking required CLI binaries (gcloud, terraform, git, openssl, curl)..."
+print_info "Checking required CLI binaries (gcloud, git, openssl, curl)..."
 
 MISSING_TOOLS=()
-for tool in gcloud terraform git openssl curl; do
+for tool in gcloud git openssl curl; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         MISSING_TOOLS+=("$tool")
     fi
@@ -295,11 +297,53 @@ done
 if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
     print_error "Missing required CLI tool(s): ${MISSING_TOOLS[*]}"
     echo "  Please install missing tools before continuing:"
-    echo "  • Terraform: brew install terraform"
     echo "  • Google Cloud SDK: brew install --cask google-cloud-sdk"
     exit 1
 fi
-print_success "All required CLI tools are installed."
+
+# Detect Terraform or OpenTofu
+TF_CMD=""
+if command -v terraform >/dev/null 2>&1; then
+    TF_CMD="terraform"
+elif command -v tofu >/dev/null 2>&1; then
+    TF_CMD="tofu"
+fi
+
+if [ -z "$TF_CMD" ]; then
+    print_warning "Neither Terraform nor OpenTofu is currently installed."
+    if command -v brew >/dev/null 2>&1; then
+        echo -e "  ${COLOR_CYAN}Homebrew is available on your machine.${COLOR_RESET}"
+        echo -e "  Terraform can be installed via HashiCorp's official tap:"
+        echo -e "    ${COLOR_BOLD}brew tap hashicorp/tap && brew install hashicorp/tap/terraform${COLOR_RESET}"
+        echo ""
+        read -r -p "$(echo -e "  ${COLOR_BOLD}Would you like this script to install Terraform now? [Y/n]: ${COLOR_RESET}")" install_tf
+        case "$install_tf" in
+            [Yy]|"")
+                confirm_run "brew tap hashicorp/tap && brew install hashicorp/tap/terraform"
+                if command -v terraform >/dev/null 2>&1; then
+                    TF_CMD="terraform"
+                    print_success "Terraform installed successfully!"
+                fi
+                ;;
+            *)
+                echo -e "  You can install Terraform manually using either:"
+                echo -e "  • Official tap: ${COLOR_CYAN}brew tap hashicorp/tap && brew install hashicorp/tap/terraform${COLOR_RESET}"
+                echo -e "  • OpenTofu (drop-in open source tool): ${COLOR_CYAN}brew install opentofu${COLOR_RESET}"
+                exit 1
+                ;;
+        esac
+    fi
+fi
+
+if [ -z "$TF_CMD" ]; then
+    print_error "Terraform or OpenTofu is required to proceed."
+    echo "  Please install using one of the following commands, then re-run ./deploy.sh:"
+    echo "  • brew tap hashicorp/tap && brew install hashicorp/tap/terraform"
+    echo "  • brew install opentofu"
+    exit 1
+fi
+print_success "Infrastructure IaC tool: ${TF_CMD} ($(command -v "$TF_CMD"))"
+print_success "All required CLI tools are present."
 
 # Verify gcloud authentication
 print_info "Verifying gcloud user authentication..."
@@ -531,30 +575,30 @@ EOF
 chmod 600 "$TFVARS_FILE"
 print_success "Generated ${TFVARS_FILE}."
 
-# Terraform Init
+# Terraform / OpenTofu Init
 if [ ! -d "${TF_DIR}/.terraform" ]; then
-    print_info "Initializing Terraform..."
-    confirm_run "cd '${TF_DIR}' && terraform init"
+    print_info "Initializing ${TF_CMD}..."
+    confirm_run "cd '${TF_DIR}' && ${TF_CMD} init"
 else
-    print_success "Terraform is already initialized."
-    read -r -p "$(echo -e "  ${COLOR_BOLD}Run 'terraform init' again to check for updates? [y/N]: ${COLOR_RESET}")" tf_init_choice
+    print_success "${TF_CMD} is already initialized."
+    read -r -p "$(echo -e "  ${COLOR_BOLD}Run '${TF_CMD} init' again to check for updates? [y/N]: ${COLOR_RESET}")" tf_init_choice
     if [[ "$tf_init_choice" =~ ^[Yy]$ ]]; then
-        confirm_run "cd '${TF_DIR}' && terraform init"
+        confirm_run "cd '${TF_DIR}' && ${TF_CMD} init"
     fi
 fi
 
-# Terraform Plan
-print_info "Previewing Terraform infrastructure execution plan..."
-confirm_run "cd '${TF_DIR}' && terraform plan"
+# Terraform / OpenTofu Plan
+print_info "Previewing ${TF_CMD} infrastructure execution plan..."
+confirm_run "cd '${TF_DIR}' && ${TF_CMD} plan"
 
-# Terraform Apply
+# Terraform / OpenTofu Apply
 print_info "Applying infrastructure changes to Google Cloud..."
-confirm_run "cd '${TF_DIR}' && terraform apply -auto-approve"
+confirm_run "cd '${TF_DIR}' && ${TF_CMD} apply -auto-approve"
 
-# Retrieve Terraform Outputs
-DASHBOARD_URL=$(cd "${TF_DIR}" && terraform output -raw dashboard_url 2>/dev/null || true)
-WEBHOOK_URL=$(cd "${TF_DIR}" && terraform output -raw webhook_url 2>/dev/null || true)
-SERVICE_ACCOUNT=$(cd "${TF_DIR}" && terraform output -raw service_account_email 2>/dev/null || true)
+# Retrieve Outputs
+DASHBOARD_URL=$(cd "${TF_DIR}" && ${TF_CMD} output -raw dashboard_url 2>/dev/null || true)
+WEBHOOK_URL=$(cd "${TF_DIR}" && ${TF_CMD} output -raw webhook_url 2>/dev/null || true)
+SERVICE_ACCOUNT=$(cd "${TF_DIR}" && ${TF_CMD} output -raw service_account_email 2>/dev/null || true)
 
 if [ -z "$DASHBOARD_URL" ]; then
     DASHBOARD_URL=$(gcloud run services describe mathlore-forge-web --region "${GCP_REGION}" --format="value(status.url)" 2>/dev/null || true)

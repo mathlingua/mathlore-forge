@@ -37,8 +37,10 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
 ### Step 1: Install & Authenticate CLI Tools
 - **What to do**:
   ```bash
-  # 1. Install Terraform (if not already installed)
-  brew install terraform
+  # 1. Install Terraform via official HashiCorp tap (or OpenTofu)
+  brew tap hashicorp/tap
+  brew install hashicorp/tap/terraform
+  # (Alternative drop-in open-source tool: brew install opentofu)
 
   # 2. Authenticate gcloud CLI
   gcloud auth login
