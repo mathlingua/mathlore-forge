@@ -59,6 +59,7 @@ class ManualRunRequest(BaseModel):
     repo: str = "mathlingua/mathlore"
     issue_number: int | None = None
     custom_prompt: str | None = None
+    mode: str = "auto"  # "auto", "author", "plan", "execute_plan"
 
 
 @router.get("/runs")
@@ -185,9 +186,34 @@ async def restart_run(
         raise HTTPException(status_code=404, detail="Run not found")
 
     if run.issue_number:
-        flow = AuthoringFlow()
-        asyncio.create_task(flow.execute(repo=run.repo, issue_number=run.issue_number, db_session=db))
-        return {"status": "success", "message": f"Restarted authoring run for issue #{run.issue_number}"}
+        if run.run_type == RunType.CURATION_PLANNING:
+            from mathlore_forge.workflows.curation_flow import CurationFlow
+            from mathlore_forge.workflows.github_client import GitHubClient
+            gh = GitHubClient()
+            issue = await gh.get_issue(run.repo, run.issue_number)
+            flow = CurationFlow(github_client=gh)
+            asyncio.create_task(
+                flow.handle_initial_proposal(
+                    repo=run.repo,
+                    issue_number=run.issue_number,
+                    issue_title=issue.title,
+                    issue_body=issue.body,
+                    author=issue.author,
+                    db_session=db,
+                )
+            )
+            return {"status": "success", "message": f"Restarted curation planning run for issue #{run.issue_number}"}
+        elif run.run_type == RunType.PLAN_EXECUTION:
+            from mathlore_forge.workflows.curation_flow import CurationFlow
+            flow = CurationFlow()
+            asyncio.create_task(
+                flow.handle_plan_execution(repo=run.repo, issue_number=run.issue_number, db_session=db)
+            )
+            return {"status": "success", "message": f"Restarted plan execution run for issue #{run.issue_number}"}
+        else:
+            flow = AuthoringFlow()
+            asyncio.create_task(flow.execute(repo=run.repo, issue_number=run.issue_number, db_session=db))
+            return {"status": "success", "message": f"Restarted authoring run for issue #{run.issue_number}"}
 
     raise HTTPException(status_code=400, detail="Cannot restart run without issue_number")
 
@@ -198,17 +224,72 @@ async def trigger_manual_run(
     db: Session = Depends(get_db),
     user: dict[str, Any] = Depends(require_admin_user),
 ) -> dict[str, Any]:
-    """Manually triggers an agent authoring run."""
+    """Manually triggers an agent authoring or planning run."""
     if not payload.issue_number:
-        raise HTTPException(status_code=400, detail="issue_number is required for authoring run")
+        raise HTTPException(status_code=400, detail="issue_number is required")
+
+    from mathlore_forge.workflows.curation_flow import CurationFlow
+    from mathlore_forge.workflows.github_client import GitHubClient
+    from mathlore_forge.workflows.intent import IssueIntent, classify_issue_intent
+
+    mode = payload.mode.lower() if payload.mode else "auto"
+
+    if mode == "execute_plan":
+        flow = CurationFlow()
+        asyncio.create_task(
+            flow.handle_plan_execution(repo=payload.repo, issue_number=payload.issue_number, db_session=db)
+        )
+        return {
+            "status": "queued",
+            "repo": payload.repo,
+            "issue_number": payload.issue_number,
+            "workflow": "execute_plan",
+            "message": f"Execution of approved plan for #{payload.issue_number} queued.",
+        }
+
+    gh = GitHubClient()
+    issue_data = None
+    try:
+        issue_data = await gh.get_issue(payload.repo, payload.issue_number)
+    except Exception:
+        pass
+
+    title = issue_data.title if issue_data else f"Issue #{payload.issue_number}"
+    body = issue_data.body if issue_data else (payload.custom_prompt or "")
+    labels = issue_data.labels if issue_data else []
+
+    intent = classify_issue_intent(title=title, body=body, labels=labels)
+
+    if mode == "plan" or (mode == "auto" and intent == IssueIntent.HIGHER_ORDER_PLANNING):
+        flow = CurationFlow(github_client=gh)
+        asyncio.create_task(
+            flow.handle_initial_proposal(
+                repo=payload.repo,
+                issue_number=payload.issue_number,
+                issue_title=title,
+                issue_body=body,
+                author=issue_data.author if issue_data else "DominicKramer",
+                db_session=db,
+            )
+        )
+        return {
+            "status": "queued",
+            "repo": payload.repo,
+            "issue_number": payload.issue_number,
+            "workflow": "curation_planning",
+            "message": f"Curation planning run for #{payload.issue_number} queued.",
+        }
 
     flow = AuthoringFlow()
-    asyncio.create_task(flow.execute(repo=payload.repo, issue_number=payload.issue_number, db_session=db))
+    asyncio.create_task(
+        flow.execute(repo=payload.repo, issue_number=payload.issue_number, db_session=db, initial_issue=issue_data)
+    )
     return {
         "status": "queued",
         "repo": payload.repo,
         "issue_number": payload.issue_number,
-        "message": "Manual authoring run queued successfully.",
+        "workflow": "authoring",
+        "message": f"Direct authoring run for #{payload.issue_number} queued.",
     }
 
 

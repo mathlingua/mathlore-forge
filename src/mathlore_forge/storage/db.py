@@ -54,6 +54,8 @@ class RunType(str, enum.Enum):
     INITIAL_AUTHORING = "INITIAL_AUTHORING"
     ADDRESS_COMMENTS = "ADDRESS_COMMENTS"
     FLYWHEEL_IMPROVEMENT = "FLYWHEEL_IMPROVEMENT"
+    CURATION_PLANNING = "CURATION_PLANNING"
+    PLAN_EXECUTION = "PLAN_EXECUTION"
     MANUAL = "MANUAL"
 
 
@@ -69,6 +71,9 @@ class IssueRecord(Base):
     body: Mapped[str] = mapped_column(Text, default="")
     author: Mapped[str] = mapped_column(String(255), default="DominicKramer")
     status: Mapped[str] = mapped_column(String(50), default="QUEUED")
+    plan_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    plan_status: Mapped[str | None] = mapped_column(String(50), default=None)  # PLANNING, AWAITING_APPROVAL, APPROVED, EXECUTING, COMPLETED
+    plan_revision: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now, onupdate=_utc_now)
 
@@ -175,7 +180,11 @@ class Database:
     def __init__(self, db_url: str = "sqlite:///mathlore_forge.sqlite"):
         self.db_url = db_url
         connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
-        self.engine = create_engine(db_url, connect_args=connect_args)
+        pool_kwargs = {}
+        if db_url == "sqlite:///:memory:":
+            from sqlalchemy.pool import StaticPool
+            pool_kwargs = {"poolclass": StaticPool}
+        self.engine = create_engine(db_url, connect_args=connect_args, **pool_kwargs)
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_tables(self) -> None:

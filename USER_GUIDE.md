@@ -14,11 +14,17 @@ Welcome to **Mathlore Forge**! This guide is written for humans to clearly expla
    - [Step 4: Requesting Changes (The Review Loop)](#step-4-requesting-changes-the-review-loop)
    - [Step 5: Approving & Landing the PR](#step-5-approving--landing-the-pr)
    - [Step 6: The Self-Improvement Flywheel](#step-6-the-self-improvement-flywheel)
-3. [Slash Commands Reference](#3-slash-commands-reference)
-4. [Running Locally vs. Production on GCP](#4-running-locally-vs-production-on-gcp)
+3. [Higher-Order Requests & The Curator Agent (Interactive Planning)](#3-higher-order-requests--the-curator-agent-interactive-planning)
+   - [Direct Authoring vs. Strategic Planning](#direct-authoring-vs-strategic-planning)
+   - [How the Planning Workflow Operates](#how-the-planning-workflow-operates)
+   - [Interactive Proposal Refinement Loop](#interactive-proposal-refinement-loop)
+   - [Executing an Approved Plan](#executing-an-approved-plan)
+4. [Slash Commands Reference](#4-slash-commands-reference)
+5. [Running Locally vs. Production on GCP](#5-running-locally-vs-production-on-gcp)
    - [Local Development Workflow](#local-development-workflow)
    - [Production Cloud Workflow](#production-cloud-workflow)
-5. [Troubleshooting & Frequently Asked Questions](#5-troubleshooting--frequently-asked-questions)
+6. [Troubleshooting & Frequently Asked Questions](#6-troubleshooting--frequently-asked-questions)
+
 
 ---
 
@@ -213,19 +219,130 @@ Once approved, Mathlore Forge does not just merge the code—it **learns from th
 
 ---
 
-## 3. Slash Commands Reference
+## 3. Higher-Order Requests & The Curator Agent (Interactive Planning)
+
+Not all mathematical requests are as concrete as *"add theorem X to file Y"*. Often, you want to guide Mathlore at a higher strategic, architectural, or pedagogical level:
+- *"I want to add more number theory content to Mathlore."*
+- *"What is the next logical chapter that should be written after Group Theory?"*
+- *"We need a pedagogical overhaul of chapter 02 to make the exposition more intuitive."*
+- *"Restructure the topological spaces definitions to introduce Hausdorff spaces and compact sets."*
+- *"Update the tone and prose across the set theory chapters to be more accessible."*
+
+For these requests, Mathlore Forge activates its **Curator / Architect Agent**. Rather than jumping straight into writing files or opening code PRs without alignment, the Curator Agent investigates the repository, formulates an **Architectural Action Plan (Proposal)**, posts it on GitHub, and notifies you at `DominicKramer@gmail.com`. You can then comment back and forth to refine the plan until you are satisfied. Only once you approve does the system spawn authoring subagents to write the code.
+
+---
+
+### Direct Authoring vs. Strategic Planning
+
+The system automatically distinguishes between two types of requests using an **Intent Classifier**:
+
+| Request Mode | Description | Example Issue Title | What Forge Does |
+| :--- | :--- | :--- | :--- |
+| **Direct Authoring** | Concrete additions to specific existing files. | `[Forge] Add subset monotonicity theorem to 01_set_theory/04_operations.mlg` | Directly authors `.mlg` code, runs `mlg check`, and opens a code PR. |
+| **Higher-Order Planning** | Abstract goals, content proposals, roadmap, structural overhauls, or curriculum design. | `[Forge] Add more number theory content` or `[Forge] What should the next logical chapter be?` | Launches the **Curator Agent**, researches repo coverage and pedagogical prerequisites, drafts a detailed Proposal on the issue, and waits for your approval. |
+
+> [!TIP]
+> You can explicitly force Forge to plan any issue by including the label `plan` or prefixing the title with `[Plan]`, e.g. `[Forge][Plan] Introduce Measure Theory`.
+
+---
+
+### How the Planning Workflow Operates
+
+```
+Dominic Kramer creates Abstract Issue
+("I want to add more number theory content")
+                    │
+                    ▼
+           Intent Classifier
+      (HIGHER_ORDER_PLANNING detected)
+                    │
+                    ▼
+          Curator / Architect Agent
+  • Surveys Mathlore content & directory structure
+  • Inspects existing `toc` tables of contents
+  • Evaluates prerequisite coverage & mathematical dependencies
+  • Synthesizes pedagogical goals & chapter outline
+                    │
+                    ▼
+     Posts Architectural Action Plan to Issue
+                    │
+                    ▼
+    Notifies Dominic (DominicKramer@gmail.com)
+  • GitHub @DominicKramer mention
+  • Direct Email alert (via SMTP if configured)
+                    │
+                    ▼
+         Awaiting Your Review & Feedback
+```
+
+---
+
+### Interactive Proposal Refinement Loop
+
+When the Curator Agent posts its proposal, you will receive an alert. You can review the proposed chapters, sections, items, and verification strategy directly on the GitHub issue.
+
+If you want changes to the plan:
+1. Leave a comment directly on the issue:
+   - *"Let's focus on prime factorization and modular arithmetic first, before touching Diophantine equations."*
+   - *"Make sure the definitions include aliases for standard notation."*
+   - *"Place this under a new top-level chapter 08_number_theory."*
+2. The Curator Agent automatically reads your feedback, incorporates your instructions, and posts **Revision 2** of the proposal to the issue.
+3. You can continue this interactive refinement dialog as many times as you like until the plan is perfect.
+
+---
+
+### Executing an Approved Plan
+
+Once you are satisfied with the proposal:
+
+#### In GitHub:
+Leave a comment on the issue:
+```
+/forge execute
+```
+*(or `/forge approve-plan`)*
+
+#### On the Web Dashboard:
+Navigate to [http://localhost:8080](http://localhost:8080). You will see the issue marked with the purple **Plan Proposed** badge. Click the **Execute** button next to the run.
+
+#### Using the CLI:
+```bash
+# Execute the approved plan for an issue
+uv run mathlore-forge plan --repo mathlingua/mathlore --issue 42 --execute
+
+# Or via worker
+uv run mathlore-forge worker --repo mathlingua/mathlore --execute-plan 42
+```
+
+#### What Happens When Executed:
+1. Forge acknowledges your approval with a comment on the GitHub issue.
+2. The Curator Agent spawns the **Mathlingua Authoring Subagent**.
+3. The authoring agent:
+   - Creates any necessary directories (e.g. `08_number_theory/`).
+   - Generates chapter prefaces (`_preface_.mlg`) and updates `toc` tables of contents.
+   - Formulates the mathematical items (Definitions, Theorems, Axioms, Proofs).
+   - Validates everything with `mlg check` to ensure 0 errors and unique UUIDs.
+   - Formats the files with `mlg format`.
+4. Opens the Pull Request on GitHub and links it back to your issue.
+
+---
+
+## 4. Slash Commands Reference
 
 You can control Mathlore Forge directly from GitHub issue and PR comments using these commands:
 
 | Command | Where to Use | Action |
 | :--- | :--- | :--- |
-| **`/forge address`** | PR Conversation | Instructs the agent to read all unresolved review comments, modify the code, re-test with `mlg`, and push a new commit. |
+| **`/forge execute`** | Issue Conversation | Approves the latest revision of an architectural proposal and spawns the authoring agent to implement it and open a PR. |
+| **`/forge approve-plan`** | Issue Conversation | Alias for `/forge execute`. |
+| **`/forge plan`** | Issue Conversation | Forces the Curator Agent to re-evaluate and draft a new plan for the issue. |
+| **`/forge address`** | PR Conversation | Instructs the agent to read all unresolved review comments on the PR, modify the code, re-test with `mlg`, and push a new commit. |
 | **`/forge approve`** | PR Conversation | Approves the PR, executes the self-improvement flywheel (guidelines + golden test), and squash-merges the PR. |
 | **`/forge merge`** | PR Conversation | Alias for `/forge approve`. |
 
 ---
 
-## 4. Running Locally vs. Production on GCP
+## 5. Running Locally vs. Production on GCP
 
 ### Local Development Workflow
 
@@ -239,14 +356,33 @@ DEV_ALLOW_LOCAL_ADMIN=true uv run mathlore-forge serve --port 8080 --host 127.0.
 # Open http://localhost:8080 in your browser.
 ```
 
-#### Triggering Local Tasks:
+#### Working with Plans via CLI:
 
-Because a local server running on `127.0.0.1:8080` cannot receive direct webhooks from GitHub without a reverse tunnel (like ngrok), you can trigger and test tasks locally using either of two methods:
-
-**Method 1: Using the CLI Worker (Fastest & Easiest)**
 ```bash
-# Test authoring for an issue
+# 1. Formulate a proposal for an abstract GitHub issue:
+uv run mathlore-forge plan --repo mathlingua/mathlore --issue 42
+
+# 2. Formulate an ad-hoc proposal without an existing issue:
+uv run mathlore-forge plan --title "Number Theory Foundations" --prompt "Add divisibility, primes, and modular arithmetic"
+
+# 3. Refine an existing proposal with feedback:
+uv run mathlore-forge plan --repo mathlingua/mathlore --issue 42 --refine "Focus on Euclidean algorithm and primes first"
+
+# 4. Execute the approved plan and submit the PR:
+uv run mathlore-forge plan --repo mathlingua/mathlore --issue 42 --execute
+```
+
+#### Triggering Background Workers:
+
+```bash
+# Test authoring for a direct issue
 uv run mathlore-forge worker --repo mathlingua/mathlore --issue 1
+
+# Test planning for an abstract issue
+uv run mathlore-forge worker --repo mathlingua/mathlore --plan-issue 42
+
+# Test executing an approved plan
+uv run mathlore-forge worker --repo mathlingua/mathlore --execute-plan 42
 
 # Test addressing review comments on a PR
 uv run mathlore-forge worker --repo mathlingua/mathlore --pr 1
@@ -255,18 +391,19 @@ uv run mathlore-forge worker --repo mathlingua/mathlore --pr 1
 uv run mathlore-forge worker --repo mathlingua/mathlore --flywheel-pr 1
 ```
 
-**Method 2: Simulating a Webhook with `curl`**
+#### Simulating Webhooks with `curl`:
+
 ```bash
-# Simulate an issue opened webhook
+# Simulate an abstract planning issue opened:
 curl -X POST http://127.0.0.1:8080/webhooks/github \
   -H "Content-Type: application/json" \
   -H "X-GitHub-Event: issues" \
   -d '{
     "action": "opened",
     "issue": {
-      "number": 1,
-      "title": "[Forge] Add subset theorem",
-      "body": "Add subset monotonicity theorem to 01_set_theory/04_operations.mlg",
+      "number": 42,
+      "title": "[Forge] Add more number theory content",
+      "body": "We need foundational number theory: prime factorization and modular arithmetic.",
       "user": {"login": "DominicKramer"},
       "labels": [{"name": "forge"}]
     },
@@ -274,18 +411,17 @@ curl -X POST http://127.0.0.1:8080/webhooks/github \
     "repository": {"full_name": "mathlingua/mathlore"}
   }'
 
-# Simulate `/forge approve` comment on a PR
+# Simulate Dominic approving the plan via comment:
 curl -X POST http://127.0.0.1:8080/webhooks/github \
   -H "Content-Type: application/json" \
   -H "X-GitHub-Event: issue_comment" \
   -d '{
     "action": "created",
     "issue": {
-      "number": 1,
-      "pull_request": {"url": "https://api.github.com/repos/mathlingua/mathlore/pulls/1"}
+      "number": 42
     },
     "comment": {
-      "body": "/forge approve",
+      "body": "/forge execute",
       "user": {"login": "DominicKramer"}
     },
     "repository": {"full_name": "mathlingua/mathlore"}
@@ -298,14 +434,14 @@ curl -X POST http://127.0.0.1:8080/webhooks/github \
 
 In production, Mathlore Forge runs on **Google Cloud Platform (Cloud Run)** provisioned via **Terraform**:
 - **Automatic Webhooks**: GitHub delivers webhooks directly to your public Cloud Run HTTPS URL.
-- **No Manual Intervention**: Commenting `/forge address` or `/forge approve` on GitHub works natively without running anything locally.
+- **No Manual Intervention**: Opening abstract issues, leaving feedback comments, commenting `/forge execute`, and commenting `/forge approve` on GitHub works completely automatically.
 - **Secure Authentication**: The web dashboard is secured by Google OAuth 2.0 and strictly limited to `DominicKramer@gmail.com`.
 
 For full step-by-step instructions on deploying to GCP, see [**`DEPLOYMENT.md`**](DEPLOYMENT.md).
 
 ---
 
-## 5. Troubleshooting & Frequently Asked Questions
+## 6. Troubleshooting & Frequently Asked Questions
 
 ### 1. GitHub says my token is "Never used" or returns `401 Unauthorized`
 - **Cause**: By default, environment variables already exported in your terminal session can shadow variables in `.env`.
@@ -323,5 +459,5 @@ For full step-by-step instructions on deploying to GCP, see [**`DEPLOYMENT.md`**
 
 ### 4. The Web Dashboard shows 0 duration / 0 tokens while the agent is running
 - Agent authoring tasks take between 1 to 2 minutes as the agent explores the repository, formulates definitions, runs `mlg check`, and formats code.
-- During this window, the task status is **Running**.
+- During this window, the task status is **Running** (or **Planning**).
 - Both the main dashboard and trajectory pages automatically poll and refresh themselves every few seconds until the run completes.

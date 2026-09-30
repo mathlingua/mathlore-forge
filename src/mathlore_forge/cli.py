@@ -172,17 +172,85 @@ def serve(
 
 
 @app.command()
+def plan(
+    repo: str = typer.Option("mathlingua/mathlore", "--repo", "-r", help="Target repository."),
+    issue: Optional[int] = typer.Option(None, "--issue", "-i", help="GitHub issue number to formulate or refine a plan for."),
+    title: Optional[str] = typer.Option(None, "--title", "-t", help="Topic or proposal title if running ad-hoc without issue."),
+    prompt: Optional[str] = typer.Option(None, "--prompt", "-p", help="Abstract proposal directive or description."),
+    refine: Optional[str] = typer.Option(None, "--refine", help="Feedback to refine an existing proposal."),
+    execute: bool = typer.Option(False, "--execute", help="Execute the approved plan and open a PR."),
+) -> None:
+    """Formulate, refine, or execute high-order pedagogical plans with the Curator Agent."""
+    from mathlore_forge.storage.db import init_db
+    from mathlore_forge.workflows.curation_flow import CurationFlow
+    from mathlore_forge.workflows.github_client import GitHubClient
+
+    async def _run() -> None:
+        flow = CurationFlow()
+        db_mgr = init_db()
+        with db_mgr.get_session() as session:
+            if execute:
+                if not issue:
+                    console.print("[bold red]--issue is required to execute an approved plan.[/bold red]")
+                    return
+                console.print(f"[bold cyan]🚀 Executing approved plan for {repo}#{issue}...[/bold cyan]")
+                await flow.handle_plan_execution(repo=repo, issue_number=issue, db_session=session)
+                console.print("[bold green]✔ Plan execution completed and PR submitted![/bold green]")
+                return
+
+            if refine:
+                if not issue:
+                    console.print("[bold red]--issue is required to refine an existing plan.[/bold red]")
+                    return
+                console.print(f"[bold cyan]🔍 Refining plan for {repo}#{issue} with feedback...[/bold cyan]")
+                updated_plan = await flow.handle_proposal_refinement(
+                    repo=repo, issue_number=issue, user_feedback=refine, db_session=session
+                )
+                console.print("[bold green]✔ Refined Proposal:[/bold green]")
+                console.print(updated_plan)
+                return
+
+            # Formulate initial plan
+            if issue is not None:
+                console.print(f"[bold cyan]🏛 Formulating plan for {repo}#{issue}...[/bold cyan]")
+                gh = GitHubClient()
+                gh_issue = await gh.get_issue(repo, issue)
+                proposal = await flow.handle_initial_proposal(
+                    repo=repo,
+                    issue_number=issue,
+                    issue_title=gh_issue.title,
+                    issue_body=gh_issue.body,
+                    author=gh_issue.author,
+                    db_session=session,
+                )
+            elif title and prompt:
+                console.print(f"[bold cyan]🏛 Formulating ad-hoc architectural proposal for '{title}'...[/bold cyan]")
+                proposal = await flow.curator_agent.draft_proposal(issue_title=title, issue_body=prompt)
+            else:
+                console.print("[bold red]Please specify either --issue, or both --title and --prompt.[/bold red]")
+                return
+
+            console.print("[bold green]✔ Proposal Generated:[/bold green]")
+            console.print(proposal)
+
+    asyncio.run(_run())
+
+
+@app.command()
 def worker(
     repo: str = typer.Option("mathlingua/mathlore", "--repo", "-r", help="Target repository."),
     issue: Optional[int] = typer.Option(None, "--issue", "-i", help="Issue number to author content for."),
+    plan_issue: Optional[int] = typer.Option(None, "--plan-issue", help="Issue number to curate an architectural plan for."),
+    execute_plan: Optional[int] = typer.Option(None, "--execute-plan", help="Issue number whose approved plan should be executed."),
     pr: Optional[int] = typer.Option(None, "--pr", help="Pull request number to address review comments for."),
     flywheel_pr: Optional[int] = typer.Option(None, "--flywheel-pr", help="PR number to run flywheel reflection on and merge."),
 ) -> None:
     """Execute a long-running agent worker task (ideal for GCP Cloud Run Jobs)."""
     from mathlore_forge.storage.db import init_db
     from mathlore_forge.workflows.authoring_flow import AuthoringFlow
-    from mathlore_forge.workflows.review_flow import ReviewFlow
+    from mathlore_forge.workflows.curation_flow import CurationFlow
     from mathlore_forge.workflows.flywheel_flow import FlywheelFlow
+    from mathlore_forge.workflows.review_flow import ReviewFlow
 
     db_mgr = init_db()
     with db_mgr.get_session() as session:
@@ -190,6 +258,26 @@ def worker(
             console.print(f"[bold cyan]🤖 Starting Authoring Worker for {repo}#{issue}...[/bold cyan]")
             flow = AuthoringFlow()
             asyncio.run(flow.execute(repo=repo, issue_number=issue, db_session=session))
+        elif plan_issue is not None:
+            console.print(f"[bold cyan]🏛 Starting Curator Planning Worker for {repo}#{plan_issue}...[/bold cyan]")
+            curation_flow = CurationFlow()
+            from mathlore_forge.workflows.github_client import GitHubClient
+            gh = GitHubClient()
+            gh_issue = asyncio.run(gh.get_issue(repo, plan_issue))
+            asyncio.run(
+                curation_flow.handle_initial_proposal(
+                    repo=repo,
+                    issue_number=plan_issue,
+                    issue_title=gh_issue.title,
+                    issue_body=gh_issue.body,
+                    author=gh_issue.author,
+                    db_session=session,
+                )
+            )
+        elif execute_plan is not None:
+            console.print(f"[bold cyan]🚀 Starting Plan Execution Worker for {repo}#{execute_plan}...[/bold cyan]")
+            curation_flow = CurationFlow()
+            asyncio.run(curation_flow.handle_plan_execution(repo=repo, issue_number=execute_plan, db_session=session))
         elif pr is not None:
             console.print(f"[bold cyan]🔍 Starting Review Resolution Worker for {repo}#{pr}...[/bold cyan]")
             flow = ReviewFlow()
@@ -199,7 +287,7 @@ def worker(
             flow = FlywheelFlow()
             asyncio.run(flow.execute(mathlore_repo=repo, pr_number=flywheel_pr, db_session=session))
         else:
-            console.print("[bold red]Please specify --issue, --pr, or --flywheel-pr.[/bold red]")
+            console.print("[bold red]Please specify --issue, --plan-issue, --execute-plan, --pr, or --flywheel-pr.[/bold red]")
 
 
 def main() -> None:

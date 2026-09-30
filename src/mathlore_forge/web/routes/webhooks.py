@@ -10,10 +10,12 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from mathlore_forge.config import ensure_env_loaded
-from mathlore_forge.storage.db import get_db, init_db
+from mathlore_forge.storage.db import IssueRecord, get_db, init_db
 from mathlore_forge.workflows.authoring_flow import AuthoringFlow
+from mathlore_forge.workflows.curation_flow import CurationFlow
 from mathlore_forge.workflows.flywheel_flow import FlywheelFlow
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubIssue
+from mathlore_forge.workflows.intent import IssueIntent, classify_issue_intent
 from mathlore_forge.workflows.review_flow import ReviewFlow
 
 ensure_env_loaded()
@@ -70,7 +72,7 @@ async def github_webhook(
     sender = payload.get("sender", {}).get("login", "")
     repo_full_name = payload.get("repository", {}).get("full_name", "mathlingua/mathlore")
 
-    # 2. Handle Issues Event (Initial Authoring Trigger)
+    # 2. Handle Issues Event (Initial Trigger: Planning vs Direct Authoring)
     if event_type == "issues":
         action = payload.get("action")
         issue = payload.get("issue", {})
@@ -81,16 +83,34 @@ async def github_webhook(
         if action in ("opened", "labeled"):
             if is_authorized_user(author) or is_authorized_user(sender):
                 if has_forge_marker(issue):
-                    # Run background task
-                    asyncio.create_task(
-                        _run_authoring_task(repo_full_name, issue_number, issue_data=issue)
-                    )
-                    return {
-                        "status": "accepted",
-                        "workflow": "authoring",
-                        "repo": repo_full_name,
-                        "issue": issue_number,
-                    }
+                    title = issue.get("title", "")
+                    body = issue.get("body", "") or ""
+                    labels = [
+                        lbl.get("name", "") if isinstance(lbl, dict) else str(lbl)
+                        for lbl in issue.get("labels", [])
+                    ]
+                    intent = classify_issue_intent(title=title, body=body, labels=labels)
+
+                    if intent == IssueIntent.HIGHER_ORDER_PLANNING:
+                        asyncio.create_task(
+                            _run_curation_planning_task(repo_full_name, issue_number, issue_data=issue)
+                        )
+                        return {
+                            "status": "accepted",
+                            "workflow": "curation_planning",
+                            "repo": repo_full_name,
+                            "issue": issue_number,
+                        }
+                    else:
+                        asyncio.create_task(
+                            _run_authoring_task(repo_full_name, issue_number, issue_data=issue)
+                        )
+                        return {
+                            "status": "accepted",
+                            "workflow": "authoring",
+                            "repo": repo_full_name,
+                            "issue": issue_number,
+                        }
 
     # 3. Handle Pull Request Review Event (Approval / Changes Requested)
     elif event_type == "pull_request_review":
@@ -125,7 +145,7 @@ async def github_webhook(
                     "pr": pr_number,
                 }
 
-    # 4. Handle Issue/PR Comments (Slash Commands)
+    # 4. Handle Issue/PR Comments (Slash Commands & Interactive Proposal Refinement)
     elif event_type == "issue_comment":
         action = payload.get("action")
         comment = payload.get("comment", {})
@@ -135,25 +155,74 @@ async def github_webhook(
         issue_or_pr_number = issue.get("number")
         is_pr = "pull_request" in issue
 
-        if action == "created" and is_authorized_user(comment_author) and is_pr:
-            if "/forge address" in comment_body or "@mathlore-forge address" in comment_body:
-                asyncio.create_task(
-                    _run_review_task(repo_full_name, issue_or_pr_number)
-                )
-                return {
-                    "status": "accepted",
-                    "workflow": "address_review_comments",
-                    "pr": issue_or_pr_number,
-                }
-            elif "/forge approve" in comment_body or "/forge merge" in comment_body:
-                asyncio.create_task(
-                    _run_flywheel_task(repo_full_name, issue_or_pr_number)
-                )
-                return {
-                    "status": "accepted",
-                    "workflow": "flywheel_and_merge",
-                    "pr": issue_or_pr_number,
-                }
+        if action == "created" and is_authorized_user(comment_author):
+            if is_pr:
+                if "/forge address" in comment_body or "@mathlore-forge address" in comment_body:
+                    asyncio.create_task(
+                        _run_review_task(repo_full_name, issue_or_pr_number)
+                    )
+                    return {
+                        "status": "accepted",
+                        "workflow": "address_review_comments",
+                        "pr": issue_or_pr_number,
+                    }
+                elif "/forge approve" in comment_body or "/forge merge" in comment_body:
+                    asyncio.create_task(
+                        _run_flywheel_task(repo_full_name, issue_or_pr_number)
+                    )
+                    return {
+                        "status": "accepted",
+                        "workflow": "flywheel_and_merge",
+                        "pr": issue_or_pr_number,
+                    }
+            else:
+                # Dominic interacting with an Issue (Planning, Refinement, Execution)
+                if any(cmd in comment_body for cmd in ("/forge execute", "/forge approve-plan", "/forge approve", "@mathlore-forge execute", "@mathlore-forge approve")):
+                    asyncio.create_task(
+                        _run_curation_execution_task(repo_full_name, issue_or_pr_number)
+                    )
+                    return {
+                        "status": "accepted",
+                        "workflow": "curation_plan_execution",
+                        "repo": repo_full_name,
+                        "issue": issue_or_pr_number,
+                    }
+                elif "/forge plan" in comment_body or "@mathlore-forge plan" in comment_body:
+                    asyncio.create_task(
+                        _run_curation_planning_task(repo_full_name, issue_or_pr_number, issue_data=issue)
+                    )
+                    return {
+                        "status": "accepted",
+                        "workflow": "curation_planning",
+                        "repo": repo_full_name,
+                        "issue": issue_or_pr_number,
+                    }
+                else:
+                    # Check if this issue is tracked and has an active plan to refine
+                    db_mgr = init_db()
+                    has_active_plan = False
+                    with db_mgr.get_session() as session:
+                        rec = (
+                            session.query(IssueRecord)
+                            .filter_by(repo=repo_full_name, issue_number=issue_or_pr_number)
+                            .first()
+                        )
+                        if rec and (rec.plan_markdown or rec.plan_status in ("PLANNING", "AWAITING_APPROVAL")):
+                            has_active_plan = True
+
+                    if has_active_plan:
+                        raw_feedback = comment.get("body", "")
+                        asyncio.create_task(
+                            _run_curation_refinement_task(
+                                repo_full_name, issue_or_pr_number, feedback=raw_feedback
+                            )
+                        )
+                        return {
+                            "status": "accepted",
+                            "workflow": "curation_plan_refinement",
+                            "repo": repo_full_name,
+                            "issue": issue_or_pr_number,
+                        }
 
     return {"status": "ignored", "event": event_type}
 
@@ -189,6 +258,72 @@ async def _run_authoring_task(repo: str, issue_number: int, issue_data: dict[str
             )
         except Exception as e:
             logger.error("Authoring flow failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+
+
+async def _run_curation_planning_task(
+    repo: str, issue_number: int, issue_data: dict[str, Any] | None = None
+) -> None:
+    """Background execution runner for curation and architectural planning flow."""
+    db_mgr = init_db()
+    with db_mgr.get_session() as session:
+        flow = CurationFlow()
+        title = ""
+        body = ""
+        author = "DominicKramer"
+        if issue_data and issue_data.get("title"):
+            title = issue_data.get("title", "")
+            body = issue_data.get("body", "") or ""
+            author = issue_data.get("user", {}).get("login", "") or issue_data.get("author", "DominicKramer")
+        else:
+            issue = await flow.github_client.get_issue(repo, issue_number)
+            title = issue.title
+            body = issue.body
+            author = issue.author
+
+        try:
+            await flow.handle_initial_proposal(
+                repo=repo,
+                issue_number=issue_number,
+                issue_title=title,
+                issue_body=body,
+                author=author,
+                db_session=session,
+            )
+        except Exception as e:
+            logger.error("Curation planning failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+
+
+async def _run_curation_refinement_task(
+    repo: str, issue_number: int, feedback: str
+) -> None:
+    """Background execution runner for proposal refinement based on Dominic Kramer's feedback."""
+    db_mgr = init_db()
+    with db_mgr.get_session() as session:
+        flow = CurationFlow()
+        try:
+            await flow.handle_proposal_refinement(
+                repo=repo,
+                issue_number=issue_number,
+                user_feedback=feedback,
+                db_session=session,
+            )
+        except Exception as e:
+            logger.error("Curation refinement failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+
+
+async def _run_curation_execution_task(repo: str, issue_number: int) -> None:
+    """Background execution runner for executing an approved plan."""
+    db_mgr = init_db()
+    with db_mgr.get_session() as session:
+        flow = CurationFlow()
+        try:
+            await flow.handle_plan_execution(
+                repo=repo,
+                issue_number=issue_number,
+                db_session=session,
+            )
+        except Exception as e:
+            logger.error("Plan execution failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
 
 
 async def _run_review_task(repo: str, pr_number: int) -> None:

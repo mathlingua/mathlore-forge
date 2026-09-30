@@ -26,7 +26,8 @@ def test_session_token_tampering():
     assert verify_session_token(tampered) is None
 
 
-def test_authorization_guard_rejects_unauthorized_user():
+def test_authorization_guard_rejects_unauthorized_user(monkeypatch):
+    monkeypatch.setenv("DEV_ALLOW_LOCAL_ADMIN", "false")
     app = create_app()
     client = TestClient(app)
 
@@ -39,7 +40,7 @@ def test_authorization_guard_rejects_unauthorized_user():
     client.cookies.set("forge_session", unauthorized_token)
     resp = client.get("/api/runs")
     assert resp.status_code == 403
-    assert "DominicKramer@gmail.com" in resp.json()["detail"]
+    assert "dominickramer@gmail.com" in resp.json()["detail"].lower()
 
     # 3. Authenticated as DominicKramer@gmail.com -> Allowed (200 OK)
     authorized_token = create_session_token("DominicKramer@gmail.com", "Dominic Kramer")

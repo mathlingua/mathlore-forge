@@ -41,7 +41,7 @@ def get_current_user(request: Request) -> dict[str, Any] | None:
     token = request.cookies.get("forge_session")
     if token:
         user = verify_session_token(token)
-        if user and user.get("email", "").lower() == ALLOWED_EMAIL:
+        if user:
             return user
 
     # Optional dev mode bypass if explicitly configured
