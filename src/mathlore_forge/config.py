@@ -11,23 +11,35 @@ import yaml
 from pydantic import BaseModel, Field
 
 
-def ensure_env_loaded() -> None:
-    """Loads environment variables from .env files if not already loaded."""
+def ensure_env_loaded(override: bool = True) -> None:
+    """Loads environment variables from .env files, overriding stale environment values by default."""
+    forge_dir = Path(__file__).resolve().parent.parent.parent
+    repo_env = forge_dir / ".env"
+
     # 1. Search upwards from cwd
     found = find_dotenv(usecwd=True)
     if found:
-        load_dotenv(found)
+        load_dotenv(found, override=override)
 
     # 2. Check forge repository root explicitly
-    forge_dir = Path(__file__).resolve().parent.parent.parent
-    repo_env = forge_dir / ".env"
     if repo_env.is_file():
-        load_dotenv(repo_env)
+        load_dotenv(repo_env, override=override)
+        try:
+            for line in repo_env.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if override or k not in os.environ:
+                        os.environ[k] = v
+        except Exception:
+            pass
 
     # 3. Check parent workspace directory
     parent_env = forge_dir.parent / ".env"
     if parent_env.is_file():
-        load_dotenv(parent_env)
+        load_dotenv(parent_env, override=override)
 
 
 # Automatically ensure .env variables are loaded upon module import

@@ -127,6 +127,8 @@ class ReviewFlow:
                 workspace = GitWorkspace.init_from_existing(local_mathlore, temp_dir)
             else:
                 repo_url = f"https://github.com/{repo}.git"
+                if self.github_client.token:
+                    repo_url = f"https://x-access-token:{self.github_client.token}@github.com/{repo}.git"
                 workspace = GitWorkspace.clone(repo_url, temp_dir)
 
             workspace.checkout_branch(pr.head_branch)
@@ -186,6 +188,9 @@ class ReviewFlow:
                 workspace.commit(commit_msg)
 
             try:
+                if self.github_client.token:
+                    auth_origin = f"https://x-access-token:{self.github_client.token}@github.com/{repo}.git"
+                    workspace.run_git(["remote", "set-url", "origin", auth_origin], check=False)
                 workspace.push("origin", pr.head_branch)
             except Exception:
                 pass

@@ -105,37 +105,77 @@
     </div>
 
     <!-- Tab 1: Reasoning & Thoughts -->
-    <div id="tab-content-thoughts" class="space-y-4">
+    <div id="tab-content-thoughts" class="space-y-6">
+        {% if run.summary %}
+        <!-- Final Assistant Output Card -->
+        <div class="bg-slate-900/90 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Authored Mathlingua Result & Summary</span>
+                </h3>
+                <span class="text-xs font-mono text-slate-400">Completed in {{ "%.1f"|format(run.duration_seconds) }}s</span>
+            </div>
+            <div class="bg-slate-950 border border-slate-800/80 rounded-xl p-5 text-sm text-slate-200 whitespace-pre-wrap font-mono leading-relaxed overflow-x-auto">
+{{ run.summary }}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Execution Overview Card -->
         <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
             <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                <span>Agent Execution Stream</span>
-                <span id="stream-status" class="text-xs text-slate-500 font-mono">SSE Connected</span>
+                <span>Execution Status & Log</span>
+                <span id="stream-status" class="text-xs text-slate-500 font-mono">
+                    {% if run.status.value == "RUNNING" %}Agent Running (Auto-polling)...{% else %}Run Finished ({{ run.status.value }}){% endif %}
+                </span>
             </h3>
 
-            <div id="live-stream-container" class="space-y-3 font-mono text-xs">
-                {% if trajectory and trajectory.thoughts %}
-                    {% for thought in trajectory.thoughts %}
-                    <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300">
-                        <div class="text-[10px] text-purple-400 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
-                            <i class="fa-solid fa-lightbulb"></i> Agent Thought
-                        </div>
-                        <div class="whitespace-pre-wrap leading-relaxed">{{ thought }}</div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <div class="text-slate-500 py-6 text-center">
-                        Waiting for agent thoughts and reasoning steps...
-                    </div>
-                {% endif %}
-            </div>
-
-            {% if run.summary %}
-            <div class="mt-6 pt-6 border-t border-slate-800">
-                <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2">Final Assistant Output</h4>
-                <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
-                    {{ run.summary }}
+            {% if run.status.value == "RUNNING" %}
+            <div class="p-6 bg-slate-950/80 border border-amber-500/30 rounded-xl flex items-center gap-4">
+                <span class="w-4 h-4 rounded-full bg-amber-400 animate-ping"></span>
+                <div>
+                    <div class="text-sm font-bold text-amber-300">Agent Turn in Progress</div>
+                    <div class="text-xs text-slate-400 mt-0.5">The agent is currently exploring the repository, checking compiler output, and drafting content. This page will automatically update once complete.</div>
                 </div>
             </div>
+            <div id="live-stream-container" class="space-y-3 font-mono text-xs mt-4"></div>
+            {% else %}
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+                <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                    <span class="text-slate-500 block mb-0.5">BRANCH CREATED</span>
+                    <span class="text-slate-200 font-bold truncate block">{{ run.branch_name or "N/A" }}</span>
+                </div>
+                <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                    <span class="text-slate-500 block mb-0.5">GITHUB PULL REQUEST</span>
+                    {% if run.pr_number %}
+                    <a href="https://github.com/{{ run.repo }}/pull/{{ run.pr_number }}" target="_blank" class="text-indigo-400 font-bold hover:underline flex items-center gap-1">
+                        <i class="fa-solid fa-code-pull-request"></i> PR #{{ run.pr_number }}
+                    </a>
+                    {% else %}
+                    <span class="text-slate-400">None created</span>
+                    {% endif %}
+                </div>
+                <div class="bg-slate-950/60 p-3 rounded-lg border border-slate-800">
+                    <span class="text-slate-500 block mb-0.5">TOOL ACTIONS EXECUTED</span>
+                    <span class="text-emerald-400 font-bold">{{ trajectory.tool_calls|length if trajectory else 0 }} actions</span>
+                </div>
+            </div>
+
+            {% if markdown_summary %}
+            <details class="bg-slate-950/60 border border-slate-800/80 rounded-xl overflow-hidden mt-4 group">
+                <summary class="p-4 cursor-pointer text-xs font-semibold text-slate-300 hover:text-white flex items-center justify-between select-none">
+                    <span class="flex items-center gap-2">
+                        <i class="fa-solid fa-file-lines text-indigo-400"></i>
+                        <span>View Step-by-Step Trajectory Trace (Markdown)</span>
+                    </span>
+                    <i class="fa-solid fa-chevron-down group-open:rotate-180 transition"></i>
+                </summary>
+                <div class="p-5 border-t border-slate-800 bg-slate-950 text-xs font-mono text-slate-300 whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-[600px]">
+{{ markdown_summary }}
+                </div>
+            </details>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -242,11 +282,27 @@ const eventSource = new EventSource('/api/runs/{{ run.id }}/stream');
 eventSource.addEventListener('update', (e) => {
     const data = JSON.parse(e.data);
     const container = document.getElementById('live-stream-container');
-    const item = document.createElement('div');
-    item.className = 'bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300';
-    item.innerHTML = `<div class="text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">${data.event}</div><div>${JSON.stringify(data)}</div>`;
-    container.appendChild(item);
+    if (container) {
+        const item = document.createElement('div');
+        item.className = 'bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300';
+        item.innerHTML = `<div class="text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">${data.event}</div><pre class="text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap">${JSON.stringify(data, null, 2)}</pre>`;
+        container.appendChild(item);
+    }
 });
+
+// Auto-poll run status every 2.5 seconds until finished
+const pollInterval = setInterval(async () => {
+    try {
+        const resp = await fetch('/api/runs/{{ run.id }}');
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.status !== 'RUNNING') {
+                clearInterval(pollInterval);
+                location.reload();
+            }
+        }
+    } catch (err) {}
+}, 2500);
 {% endif %}
 </script>
 {% endblock %}

@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
+from mathlore_forge.config import ensure_env_loaded
 from mathlore_forge.storage.db import get_db, init_db
 from mathlore_forge.workflows.authoring_flow import AuthoringFlow
 from mathlore_forge.workflows.flywheel_flow import FlywheelFlow
-from mathlore_forge.workflows.github_client import GitHubClient
+from mathlore_forge.workflows.github_client import GitHubClient, GitHubIssue
 from mathlore_forge.workflows.review_flow import ReviewFlow
+
+ensure_env_loaded()
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
@@ -76,10 +81,9 @@ async def github_webhook(
         if action in ("opened", "labeled"):
             if is_authorized_user(author) or is_authorized_user(sender):
                 if has_forge_marker(issue):
-                    authoring_flow = AuthoringFlow()
                     # Run background task
                     asyncio.create_task(
-                        _run_authoring_task(repo_full_name, issue_number)
+                        _run_authoring_task(repo_full_name, issue_number, issue_data=issue)
                     )
                     return {
                         "status": "accepted",
@@ -154,12 +158,37 @@ async def github_webhook(
     return {"status": "ignored", "event": event_type}
 
 
-async def _run_authoring_task(repo: str, issue_number: int) -> None:
+async def _run_authoring_task(repo: str, issue_number: int, issue_data: dict[str, Any] | None = None) -> None:
     """Background execution runner for authoring flow."""
     db_mgr = init_db()
     with db_mgr.get_session() as session:
         flow = AuthoringFlow()
-        await flow.execute(repo=repo, issue_number=issue_number, db_session=session)
+        initial_issue = None
+        if issue_data and issue_data.get("title"):
+            labels = []
+            for item in issue_data.get("labels", []):
+                if isinstance(item, dict):
+                    labels.append(item.get("name", ""))
+                elif isinstance(item, str):
+                    labels.append(item)
+            initial_issue = GitHubIssue(
+                number=issue_number,
+                title=issue_data.get("title", ""),
+                body=issue_data.get("body", "") or "",
+                author=issue_data.get("user", {}).get("login", "") or issue_data.get("author", ""),
+                labels=labels,
+                state=issue_data.get("state", "open"),
+                html_url=issue_data.get("html_url", ""),
+            )
+        try:
+            await flow.execute(
+                repo=repo,
+                issue_number=issue_number,
+                db_session=session,
+                initial_issue=initial_issue,
+            )
+        except Exception as e:
+            logger.error("Authoring flow failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
 
 
 async def _run_review_task(repo: str, pr_number: int) -> None:
@@ -167,7 +196,10 @@ async def _run_review_task(repo: str, pr_number: int) -> None:
     db_mgr = init_db()
     with db_mgr.get_session() as session:
         flow = ReviewFlow()
-        await flow.execute(repo=repo, pr_number=pr_number, db_session=session)
+        try:
+            await flow.execute(repo=repo, pr_number=pr_number, db_session=session)
+        except Exception as e:
+            logger.error("Review resolution flow failed for %s#%s: %s", repo, pr_number, e, exc_info=True)
 
 
 async def _run_flywheel_task(repo: str, pr_number: int) -> None:
@@ -175,4 +207,7 @@ async def _run_flywheel_task(repo: str, pr_number: int) -> None:
     db_mgr = init_db()
     with db_mgr.get_session() as session:
         flow = FlywheelFlow()
-        await flow.execute(mathlore_repo=repo, pr_number=pr_number, db_session=session)
+        try:
+            await flow.execute(mathlore_repo=repo, pr_number=pr_number, db_session=session)
+        except Exception as e:
+            logger.error("Flywheel flow failed for %s#%s: %s", repo, pr_number, e, exc_info=True)

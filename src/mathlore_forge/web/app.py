@@ -9,10 +9,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from mathlore_forge.config import ensure_env_loaded
 from mathlore_forge.storage.db import init_db
 from mathlore_forge.web.routes.api import router as api_router
 from mathlore_forge.web.routes.dashboard import router as dashboard_router
 from mathlore_forge.web.routes.webhooks import router as webhooks_router
+
+ensure_env_loaded()
 
 
 @asynccontextmanager

@@ -55,13 +55,17 @@ class AuthoringFlow:
         db_session: Session,
         run_id: str | None = None,
         workspace_base_dir: Path | str | None = None,
+        initial_issue: GitHubIssue | None = None,
     ) -> AgentRunRecord:
         """Executes the full authoring workflow for a GitHub issue."""
         run_id = run_id or f"run_{uuid.uuid4().hex[:12]}"
         start_time = time.perf_counter()
 
         # 1. Fetch issue details
-        issue = await self.github_client.get_issue(repo, issue_number)
+        if initial_issue:
+            issue = initial_issue
+        else:
+            issue = await self.github_client.get_issue(repo, issue_number)
 
         # 2. Persist issue record
         issue_record = (
@@ -110,6 +114,8 @@ class AuthoringFlow:
                 workspace = GitWorkspace.init_from_existing(local_mathlore, temp_dir)
             else:
                 repo_url = f"https://github.com/{repo}.git"
+                if self.github_client.token:
+                    repo_url = f"https://x-access-token:{self.github_client.token}@github.com/{repo}.git"
                 workspace = GitWorkspace.clone(repo_url, temp_dir)
 
             workspace.checkout_branch(branch_name, create=True)
@@ -167,6 +173,9 @@ class AuthoringFlow:
 
             # Push branch if remote configured
             try:
+                if self.github_client.token:
+                    auth_url = f"https://x-access-token:{self.github_client.token}@github.com/{repo}.git"
+                    workspace.run_git(["remote", "set-url", "origin", auth_url], check=False)
                 workspace.push("origin", branch_name)
             except Exception:
                 pass  # In local test environments without remote origin, continue
@@ -205,14 +214,21 @@ class AuthoringFlow:
                 )
                 db_session.add(pr_record)
 
-                # Request review from Dominic
-                await self.github_client.request_reviewers(repo, pr.number, [issue.author])
-                await self.github_client.create_issue_comment(
-                    repo,
-                    pr.number,
-                    f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR and leave feedback. "
-                    f"When ready, leave a review or comment `/forge address` to trigger any requested modifications.",
-                )
+                # Request review from Dominic (safe if Dominic is also the PR author)
+                try:
+                    await self.github_client.request_reviewers(repo, pr.number, [issue.author])
+                except Exception:
+                    pass
+
+                try:
+                    await self.github_client.create_issue_comment(
+                        repo,
+                        pr.number,
+                        f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR and leave feedback. "
+                        f"When ready, leave a review or comment `/forge address` to trigger any requested modifications.",
+                    )
+                except Exception:
+                    pass
             except Exception as pr_err:
                 run_record.error_message = f"PR creation warning: {pr_err}"
                 run_record.status = RunStatus.AWAITING_REVIEW

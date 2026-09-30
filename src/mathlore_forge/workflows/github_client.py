@@ -10,6 +10,10 @@ from typing import Any, Sequence
 import httpx
 from pydantic import BaseModel, Field
 
+from mathlore_forge.config import ensure_env_loaded
+
+ensure_env_loaded()
+
 
 class GitHubReviewComment(BaseModel):
     """Represents a code review comment on a Pull Request."""
@@ -58,13 +62,16 @@ class GitHubClient:
         token: str | None = None,
         base_url: str = "https://api.github.com",
     ):
-        self.token = token or os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+        ensure_env_loaded()
+        raw_token = token or os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or ""
+        self.token = raw_token.strip() or None
         self.base_url = base_url.rstrip("/")
 
     def _headers(self) -> dict[str, str]:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": "Mathlore-Forge",
         }
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
@@ -211,14 +218,22 @@ class GitHubClient:
 
     async def request_reviewers(self, repo: str, pr_number: int, reviewers: Sequence[str]) -> None:
         """Requests reviews from specified GitHub usernames."""
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}/repos/{repo}/pulls/{pr_number}/requested_reviewers",
-                headers=self._headers(),
-                json={"reviewers": list(reviewers)},
-                timeout=15.0,
-            )
-            resp.raise_for_status()
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self.base_url}/repos/{repo}/pulls/{pr_number}/requested_reviewers",
+                    headers=self._headers(),
+                    json={"reviewers": list(reviewers)},
+                    timeout=15.0,
+                )
+                if resp.status_code == 422:
+                    # 422 occurs if a requested reviewer is the PR author or already requested
+                    return
+                resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 422:
+                return
+            raise
 
     async def merge_pull_request(
         self,

@@ -100,7 +100,10 @@ class FlywheelFlow:
                 if (forge_root / "skills").is_dir():
                     workspace = GitWorkspace.init_from_existing(forge_root, temp_dir)
                 else:
-                    workspace = GitWorkspace.clone(f"https://github.com/{forge_repo}.git", temp_dir)
+                    repo_url = f"https://github.com/{forge_repo}.git"
+                    if self.github_client.token:
+                        repo_url = f"https://x-access-token:{self.github_client.token}@github.com/{forge_repo}.git"
+                    workspace = GitWorkspace.clone(repo_url, temp_dir)
 
                 branch_name = f"forge/improve-from-mathlore-pr-{pr_number}"
                 workspace.checkout_branch(branch_name, create=True)
@@ -120,6 +123,9 @@ class FlywheelFlow:
                     workspace.commit(commit_msg)
 
                     try:
+                        if self.github_client.token:
+                            auth_origin = f"https://x-access-token:{self.github_client.token}@github.com/{forge_repo}.git"
+                            workspace.run_git(["remote", "set-url", "origin", auth_origin], check=False)
                         workspace.push("origin", branch_name)
                     except Exception:
                         pass

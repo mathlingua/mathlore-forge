@@ -2,6 +2,10 @@
 
 A durable, self-improving AI forge system designed to autonomously create and curate **Mathlore** (the comprehensive formal mathematics repository written in Mathlingua).
 
+📖 **Documentation Quick Links**:
+- 👉 [**User Guide & Operator Manual (USER_GUIDE.md)**](USER_GUIDE.md): Human-oriented, step-by-step guide explaining the issue-to-merge lifecycle, reviewing PRs, slash commands, and local/production workflows.
+- 👉 [**Terraform Deployment & Operations Manual (DEPLOYMENT.md)**](DEPLOYMENT.md): Complete guide for deploying to GCP Cloud Run, rolling updates, tearing down instances, and GitHub webhook setup.
+
 ## Architecture
 
 - **Harness**: [Google Antigravity SDK](https://github.com/google/antigravity)
@@ -137,29 +141,35 @@ uv run mathlore-forge worker --repo mathlingua/mathlore --issue 42
 uv run mathlore-forge worker --repo mathlingua/mathlore --pr 43
 ```
 
-### 2. Creating a New Deployment on GCP
+### 2. Creating a New Deployment on GCP (Terraform)
 ```bash
 export GCP_PROJECT_ID="your-project-id"
 export GCP_REGION="us-central1"
 
-# Deploys Cloud Run service and Cloud Run Jobs
-./infra/deploy.sh
+# 1. Build initial container image
+gcloud builds submit --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mathlore-forge/app:latest" -f infra/Dockerfile .
+
+# 2. Provision infrastructure with Terraform
+cd infra/terraform
+terraform init
+terraform apply -var="project_id=$GCP_PROJECT_ID" -var="region=$GCP_REGION"
 ```
 
 ### 3. Updating an Existing Deployment (Rollout Changes)
 ```bash
+# 1. Build and tag image with git commit SHA
 TAG=$(git rev-parse --short HEAD)
-IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mathlore-forge/app:${TAG}"
+gcloud builds submit --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mathlore-forge/app:${TAG}" -f infra/Dockerfile .
 
-gcloud builds submit --tag "$IMAGE" -f infra/Dockerfile .
-gcloud run deploy mathlore-forge-web --image "$IMAGE" --region "$GCP_REGION"
-gcloud run jobs update mathlore-forge-worker --image "$IMAGE" --region "$GCP_REGION"
+# 2. Declaratively roll out the revision
+cd infra/terraform
+terraform apply -var="project_id=$GCP_PROJECT_ID" -var="region=$GCP_REGION" -var="image_tag=$TAG"
 ```
 
 ### 4. Tearing Down & Stopping All Instances
 ```bash
-# Deletes Cloud Run service, worker job, Docker images, and stops all costs
-./infra/teardown.sh
+cd infra/terraform
+terraform destroy -var="project_id=$GCP_PROJECT_ID" -var="region=$GCP_REGION"
 ```
 
 For full step-by-step instructions (with explanations of what each step does and why it is needed), GitHub webhook setup, secret configurations, and instant rollback procedures, see the comprehensive guide:

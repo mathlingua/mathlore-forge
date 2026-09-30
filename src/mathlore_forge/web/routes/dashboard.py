@@ -187,6 +187,7 @@ async def trajectory_page(
             "user": user,
             "run": run,
             "trajectory": trajectory_data,
+            "markdown_summary": traj_rec.markdown_summary if traj_rec else "",
         },
     )
 
