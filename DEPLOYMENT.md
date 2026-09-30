@@ -152,9 +152,9 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
     --location="$GCP_REGION" 2>/dev/null || true
 
   # 3. Build and push container image using Cloud Build
+  # (Ensure Dockerfile is at repo root; Cloud Build automatically uses it)
   gcloud builds submit \
-    --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mathlore-forge/app:latest" \
-    -f infra/Dockerfile .
+    --tag "${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mathlore-forge/app:latest" .
   ```
 - **Why it is needed**:
   Cloud Run requires a container image to be present at creation time. Cloud Build compiles your code and dependencies in the cloud and pushes the image directly into Artifact Registry.
@@ -322,7 +322,7 @@ When you update prompts, domain skills in `skills/`, compiler tooling, or web da
 ### Step 2: Build the Container Image
 - **What to do**:
   ```bash
-  gcloud builds submit --tag "$IMAGE" -f infra/Dockerfile .
+  gcloud builds submit --tag "$IMAGE" .
   ```
 - **Why it is needed**:
   Cloud Build compiles the Python code, synchronizes dependencies via `uv`, packages domain skills, and stores the immutable image in Artifact Registry.

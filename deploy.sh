@@ -508,8 +508,12 @@ if [ -n "$IMAGE_EXISTS" ]; then
 fi
 
 if [ "$REBUILD" = "true" ]; then
+    # Ensure Dockerfile is present at repository root for Cloud Build
+    if [ ! -f "${SCRIPT_DIR}/Dockerfile" ] && [ -f "${SCRIPT_DIR}/infra/Dockerfile" ]; then
+        cp "${SCRIPT_DIR}/infra/Dockerfile" "${SCRIPT_DIR}/Dockerfile"
+    fi
     print_info "Building container image using Google Cloud Build..."
-    confirm_run "gcloud builds submit --tag '${IMAGE_URI}' -f infra/Dockerfile ."
+    confirm_run "gcloud builds submit --tag '${IMAGE_URI}' ."
 fi
 
 # ------------------------------------------------------------------------------
