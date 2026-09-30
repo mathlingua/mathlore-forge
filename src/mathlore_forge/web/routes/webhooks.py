@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
 from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -26,6 +27,19 @@ router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 ALLOWED_AUTHOR = os.getenv("ALLOWED_GITHUB_AUTHOR", "DominicKramer").strip().lower()
 WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET", "")
 FORGE_LABEL = os.getenv("FORGE_ISSUE_LABEL", "forge").strip().lower()
+
+
+def get_dashboard_base_url(request: Request | None = None) -> str:
+    """Computes the dashboard base URL for notifications and links."""
+    env_url = os.getenv("DASHBOARD_URL", "").strip().rstrip("/")
+    if env_url:
+        return env_url
+    if request:
+        proto = request.headers.get("x-forwarded-proto", "https")
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc
+        if host:
+            return f"{proto}://{host}".rstrip("/")
+    return "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app"
 
 
 def is_authorized_user(username: str | None) -> bool:
@@ -68,6 +82,7 @@ async def github_webhook(
 
     payload = await request.json()
     event_type = x_github_event or request.headers.get("x-github-event")
+    base_url = get_dashboard_base_url(request)
 
     sender = payload.get("sender", {}).get("login", "")
     repo_full_name = payload.get("repository", {}).get("full_name", "mathlingua/mathlore")
@@ -93,7 +108,7 @@ async def github_webhook(
 
                     if intent == IssueIntent.HIGHER_ORDER_PLANNING:
                         asyncio.create_task(
-                            _run_curation_planning_task(repo_full_name, issue_number, issue_data=issue)
+                            _run_curation_planning_task(repo_full_name, issue_number, issue_data=issue, base_url=base_url)
                         )
                         return {
                             "status": "accepted",
@@ -103,7 +118,7 @@ async def github_webhook(
                         }
                     else:
                         asyncio.create_task(
-                            _run_authoring_task(repo_full_name, issue_number, issue_data=issue)
+                            _run_authoring_task(repo_full_name, issue_number, issue_data=issue, base_url=base_url)
                         )
                         return {
                             "status": "accepted",
@@ -179,7 +194,7 @@ async def github_webhook(
                 # Dominic interacting with an Issue (Planning, Refinement, Execution)
                 if any(cmd in comment_body for cmd in ("/forge execute", "/forge approve-plan", "/forge approve", "@mathlore-forge execute", "@mathlore-forge approve")):
                     asyncio.create_task(
-                        _run_curation_execution_task(repo_full_name, issue_or_pr_number)
+                        _run_curation_execution_task(repo_full_name, issue_or_pr_number, base_url=base_url)
                     )
                     return {
                         "status": "accepted",
@@ -189,7 +204,7 @@ async def github_webhook(
                     }
                 elif "/forge plan" in comment_body or "@mathlore-forge plan" in comment_body:
                     asyncio.create_task(
-                        _run_curation_planning_task(repo_full_name, issue_or_pr_number, issue_data=issue)
+                        _run_curation_planning_task(repo_full_name, issue_or_pr_number, issue_data=issue, base_url=base_url)
                     )
                     return {
                         "status": "accepted",
@@ -214,7 +229,7 @@ async def github_webhook(
                         raw_feedback = comment.get("body", "")
                         asyncio.create_task(
                             _run_curation_refinement_task(
-                                repo_full_name, issue_or_pr_number, feedback=raw_feedback
+                                repo_full_name, issue_or_pr_number, feedback=raw_feedback, base_url=base_url
                             )
                         )
                         return {
@@ -227,7 +242,12 @@ async def github_webhook(
     return {"status": "ignored", "event": event_type}
 
 
-async def _run_authoring_task(repo: str, issue_number: int, issue_data: dict[str, Any] | None = None) -> None:
+async def _run_authoring_task(
+    repo: str,
+    issue_number: int,
+    issue_data: dict[str, Any] | None = None,
+    base_url: str = "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app",
+) -> None:
     """Background execution runner for authoring flow."""
     db_mgr = init_db()
     with db_mgr.get_session() as session:
@@ -249,19 +269,53 @@ async def _run_authoring_task(repo: str, issue_number: int, issue_data: dict[str
                 state=issue_data.get("state", "open"),
                 html_url=issue_data.get("html_url", ""),
             )
+
+        run_id = f"run_auth_{uuid.uuid4().hex[:12]}"
+        run_url = f"{base_url}/runs/{run_id}"
+
+        # 1. Post immediate acknowledgment on GitHub issue
+        try:
+            ack_msg = (
+                f"### 🤖 Mathlore Forge Agent Initialized\n\n"
+                f"I've picked up this issue and am authoring the requested Mathlingua content.\n\n"
+                f"- **Run ID**: `{run_id}`\n"
+                f"- **Workflow**: `Direct Authoring`\n"
+                f"- **Live Dashboard & Telemetry**: [View Run on Mathlore Forge Dashboard]({run_url})\n\n"
+                f"*I will run `mlg check`, validate the mathematical formulations, and open a Pull Request when complete.*"
+            )
+            await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=ack_msg)
+        except Exception as ack_err:
+            logger.warning("Failed to post initial acknowledgment comment for %s#%s: %s", repo, issue_number, ack_err)
+
         try:
             await flow.execute(
                 repo=repo,
                 issue_number=issue_number,
                 db_session=session,
+                run_id=run_id,
                 initial_issue=initial_issue,
+                dashboard_url=run_url,
             )
         except Exception as e:
             logger.error("Authoring flow failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+            try:
+                err_msg = (
+                    f"### ⚠️ Mathlore Forge Agent Encountered an Error\n\n"
+                    f"An error occurred during authoring:\n"
+                    f"> {e}\n\n"
+                    f"- **Run ID**: `{run_id}`\n"
+                    f"- **Telemetry & Logs**: [Inspect Error on Dashboard]({run_url})\n"
+                )
+                await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=err_msg)
+            except Exception:
+                pass
 
 
 async def _run_curation_planning_task(
-    repo: str, issue_number: int, issue_data: dict[str, Any] | None = None
+    repo: str,
+    issue_number: int,
+    issue_data: dict[str, Any] | None = None,
+    base_url: str = "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app",
 ) -> None:
     """Background execution runner for curation and architectural planning flow."""
     db_mgr = init_db()
@@ -275,10 +329,30 @@ async def _run_curation_planning_task(
             body = issue_data.get("body", "") or ""
             author = issue_data.get("user", {}).get("login", "") or issue_data.get("author", "DominicKramer")
         else:
-            issue = await flow.github_client.get_issue(repo, issue_number)
-            title = issue.title
-            body = issue.body
-            author = issue.author
+            try:
+                issue = await flow.github_client.get_issue(repo, issue_number)
+                title = issue.title
+                body = issue.body
+                author = issue.author
+            except Exception as e:
+                logger.warning("Could not fetch issue %s#%s from GitHub: %s", repo, issue_number, e)
+
+        run_id = f"run_plan_{uuid.uuid4().hex[:12]}"
+        run_url = f"{base_url}/runs/{run_id}"
+
+        # 1. Post immediate acknowledgment on GitHub issue
+        try:
+            ack_msg = (
+                f"### 🤖 Mathlore Forge Agent Initialized\n\n"
+                f"I've picked up this issue and am analyzing the repository architecture to formulate a curation plan.\n\n"
+                f"- **Run ID**: `{run_id}`\n"
+                f"- **Workflow**: `Curation & Architectural Planning`\n"
+                f"- **Live Dashboard & Telemetry**: [View Run on Mathlore Forge Dashboard]({run_url})\n\n"
+                f"*I will post the proposed mathematical structure and plan here once ready for your review.*"
+            )
+            await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=ack_msg)
+        except Exception as ack_err:
+            logger.warning("Failed to post initial acknowledgment comment for %s#%s: %s", repo, issue_number, ack_err)
 
         try:
             await flow.handle_initial_proposal(
@@ -288,42 +362,106 @@ async def _run_curation_planning_task(
                 issue_body=body,
                 author=author,
                 db_session=session,
+                run_id=run_id,
+                dashboard_url=run_url,
             )
         except Exception as e:
             logger.error("Curation planning failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+            try:
+                err_msg = (
+                    f"### ⚠️ Mathlore Forge Agent Encountered an Error\n\n"
+                    f"An error occurred while drafting the curation plan:\n"
+                    f"> {e}\n\n"
+                    f"- **Run ID**: `{run_id}`\n"
+                    f"- **Telemetry & Logs**: [Inspect Error on Dashboard]({run_url})\n"
+                )
+                await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=err_msg)
+            except Exception:
+                pass
 
 
 async def _run_curation_refinement_task(
-    repo: str, issue_number: int, feedback: str
+    repo: str,
+    issue_number: int,
+    feedback: str,
+    base_url: str = "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app",
 ) -> None:
     """Background execution runner for proposal refinement based on Dominic Kramer's feedback."""
     db_mgr = init_db()
     with db_mgr.get_session() as session:
         flow = CurationFlow()
+        run_id = f"run_refine_{uuid.uuid4().hex[:12]}"
+        run_url = f"{base_url}/runs/{run_id}"
+
+        # 1. Immediate acknowledgment
+        try:
+            ack_msg = (
+                f"### 🔄 Incorporating Feedback\n\n"
+                f"I've received your feedback and am updating the curation proposal.\n\n"
+                f"- **Run ID**: `{run_id}`\n"
+                f"- **Live Dashboard & Telemetry**: [View Run on Mathlore Forge Dashboard]({run_url})"
+            )
+            await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=ack_msg)
+        except Exception as ack_err:
+            logger.warning("Failed to post refinement acknowledgment for %s#%s: %s", repo, issue_number, ack_err)
+
         try:
             await flow.handle_proposal_refinement(
                 repo=repo,
                 issue_number=issue_number,
                 user_feedback=feedback,
                 db_session=session,
+                run_id=run_id,
+                dashboard_url=run_url,
             )
         except Exception as e:
             logger.error("Curation refinement failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+            try:
+                err_msg = (
+                    f"### ⚠️ Refinement Error\n\n"
+                    f"An error occurred while refining the plan:\n"
+                    f"> {e}\n\n"
+                    f"- **Run ID**: `{run_id}`\n"
+                    f"- **Telemetry & Logs**: [Inspect Error on Dashboard]({run_url})\n"
+                )
+                await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=err_msg)
+            except Exception:
+                pass
 
 
-async def _run_curation_execution_task(repo: str, issue_number: int) -> None:
+async def _run_curation_execution_task(
+    repo: str,
+    issue_number: int,
+    base_url: str = "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app",
+) -> None:
     """Background execution runner for executing an approved plan."""
     db_mgr = init_db()
     with db_mgr.get_session() as session:
         flow = CurationFlow()
+        run_id = f"run_exec_{uuid.uuid4().hex[:12]}"
+        run_url = f"{base_url}/runs/{run_id}"
+
         try:
             await flow.handle_plan_execution(
                 repo=repo,
                 issue_number=issue_number,
                 db_session=session,
+                run_id=run_id,
+                dashboard_url=run_url,
             )
         except Exception as e:
             logger.error("Plan execution failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+            try:
+                err_msg = (
+                    f"### ⚠️ Plan Execution Error\n\n"
+                    f"An error occurred while executing the approved plan:\n"
+                    f"> {e}\n\n"
+                    f"- **Run ID**: `{run_id}`\n"
+                    f"- **Telemetry & Logs**: [Inspect Error on Dashboard]({run_url})\n"
+                )
+                await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=issue_number, body=err_msg)
+            except Exception:
+                pass
 
 
 async def _run_review_task(repo: str, pr_number: int) -> None:

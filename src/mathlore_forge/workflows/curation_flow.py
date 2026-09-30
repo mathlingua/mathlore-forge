@@ -56,6 +56,7 @@ class CurationFlow:
         db_session: Session,
         author: str = "DominicKramer",
         run_id: str | None = None,
+        dashboard_url: str | None = None,
     ) -> str:
         """Formulates an initial proposal and posts it to the GitHub issue."""
         run_id = run_id or f"run_plan_{uuid.uuid4().hex[:12]}"
@@ -111,10 +112,18 @@ class CurationFlow:
             db_session.commit()
 
             # 5. Post proposal to GitHub issue
+            proposal_body = proposal
+            if dashboard_url:
+                proposal_body = (
+                    f"{proposal}\n\n"
+                    f"---\n"
+                    f"🔍 **Telemetry & Compiler Logs**: [View Run `{run_id}` on Mathlore Forge Dashboard]({dashboard_url})\n\n"
+                    f"💬 *Next Steps:* Comment on this issue to refine the plan, or comment `/forge execute` to approve and begin authoring."
+                )
             await self.github_client.create_issue_comment(
                 repo=repo,
                 issue_or_pr_number=issue_number,
-                body=proposal,
+                body=proposal_body,
             )
 
             # 6. Notify Dominic Kramer
@@ -147,6 +156,7 @@ class CurationFlow:
         user_feedback: str,
         db_session: Session,
         run_id: str | None = None,
+        dashboard_url: str | None = None,
     ) -> str:
         """Refines the proposal based on Dominic Kramer's issue comments."""
         run_id = run_id or f"run_refine_{uuid.uuid4().hex[:12]}"
@@ -189,10 +199,18 @@ class CurationFlow:
             db_session.commit()
 
             # Post updated proposal
+            body_to_post = refined
+            if dashboard_url:
+                body_to_post = (
+                    f"{refined}\n\n"
+                    f"---\n"
+                    f"🔍 **Telemetry & Compiler Logs**: [View Run `{run_id}` on Mathlore Forge Dashboard]({dashboard_url})\n\n"
+                    f"💬 *Next Steps:* Comment on this issue to refine further, or comment `/forge execute` to approve and begin authoring."
+                )
             await self.github_client.create_issue_comment(
                 repo=repo,
                 issue_or_pr_number=issue_number,
-                body=refined,
+                body=body_to_post,
             )
 
             # Notify Dominic
@@ -224,9 +242,11 @@ class CurationFlow:
         issue_number: int,
         db_session: Session,
         run_id: str | None = None,
+        dashboard_url: str | None = None,
     ) -> AgentRunRecord:
         """Executes an approved plan by spawning authoring agent(s) and creating the PR."""
         run_id = run_id or f"run_exec_{uuid.uuid4().hex[:12]}"
+        dash_link = dashboard_url or "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app"
         start_time = time.perf_counter()
 
         issue_record = (
@@ -249,7 +269,7 @@ class CurationFlow:
                 f"### 🚀 Plan Approved by @DominicKramer\n\n"
                 f"Launching autonomous authoring agent to execute Revision {issue_record.plan_revision} of the plan.\n"
                 f"The agent will create files, register them in `toc` tables of contents, validate with `mlg check`, and open a Pull Request.\n\n"
-                f"Track live execution progress on the dashboard: http://localhost:8080"
+                f"Track live execution progress on the dashboard: [View Run on Mathlore Forge Dashboard]({dash_link})"
             ),
         )
         self.notification_service.notify_plan_approved(
@@ -381,7 +401,11 @@ class CurationFlow:
                 await self.github_client.create_issue_comment(
                     repo=repo,
                     issue_or_pr_number=issue_number,
-                    body=f"@{issue_record.author} The approved plan has been implemented and submitted in PR #{pr.number} ({pr.html_url})! Please review the changes.",
+                    body=(
+                        f"@{issue_record.author} The approved plan has been implemented and submitted in PR #{pr.number} ({pr.html_url})!\n\n"
+                        f"- **Live Agent Run**: [View Run on Mathlore Forge Dashboard]({dash_link})\n\n"
+                        f"Please review the pull request changes."
+                    ),
                 )
             except Exception as pr_err:
                 run_record.error_message = f"PR creation warning: {pr_err}"

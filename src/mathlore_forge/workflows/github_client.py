@@ -64,7 +64,12 @@ class GitHubClient:
     ):
         ensure_env_loaded()
         raw_token = token or os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or ""
-        self.token = raw_token.strip() or None
+        clean = raw_token.strip().strip("'\"")
+        if clean.startswith("Bearer "):
+            clean = clean[7:].strip()
+        elif clean.startswith("token "):
+            clean = clean[6:].strip()
+        self.token = clean or None
         self.base_url = base_url.rstrip("/")
 
     def _headers(self) -> dict[str, str]:
@@ -205,6 +210,11 @@ class GitHubClient:
 
     async def create_issue_comment(self, repo: str, issue_or_pr_number: int, body: str) -> str:
         """Adds a top-level conversation comment to an issue or PR."""
+        if not self.token:
+            raise ValueError(
+                "GITHUB_TOKEN is missing or empty in the runtime environment. "
+                "Please ensure GITHUB_TOKEN has an active version in GCP Secret Manager."
+            )
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.base_url}/repos/{repo}/issues/{issue_or_pr_number}/comments",
@@ -212,6 +222,16 @@ class GitHubClient:
                 json={"body": body},
                 timeout=15.0,
             )
+            if resp.status_code == 401:
+                raise ValueError(
+                    f"GitHub API rejected GITHUB_TOKEN (401 Unauthorized) when commenting on {repo}#{issue_or_pr_number}. "
+                    "Please verify that GITHUB_TOKEN is valid, unexpired, and has 'Issues' (Read and Write) permissions."
+                )
+            if resp.status_code == 403:
+                raise ValueError(
+                    f"GitHub API returned 403 Forbidden when commenting on {repo}#{issue_or_pr_number}. "
+                    "Please verify that GITHUB_TOKEN has write access to this repository."
+                )
             resp.raise_for_status()
             data = resp.json()
             return data.get("html_url", "")

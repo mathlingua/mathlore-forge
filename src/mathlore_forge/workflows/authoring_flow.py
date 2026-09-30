@@ -56,6 +56,7 @@ class AuthoringFlow:
         run_id: str | None = None,
         workspace_base_dir: Path | str | None = None,
         initial_issue: GitHubIssue | None = None,
+        dashboard_url: str | None = None,
     ) -> AgentRunRecord:
         """Executes the full authoring workflow for a GitHub issue."""
         run_id = run_id or f"run_{uuid.uuid4().hex[:12]}"
@@ -227,6 +228,19 @@ class AuthoringFlow:
                         f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR and leave feedback. "
                         f"When ready, leave a review or comment `/forge address` to trigger any requested modifications.",
                     )
+                except Exception:
+                    pass
+
+                # Post notification on the originating issue
+                try:
+                    issue_notice = (
+                        f"🚀 **Pull Request opened:** #{pr.number} ({pr.html_url})\n\n"
+                        f"- **Branch:** `{branch_name}`\n"
+                    )
+                    if dashboard_url:
+                        issue_notice += f"- **Dashboard Run:** [View Real-Time Agent Telemetry]({dashboard_url})\n"
+                    issue_notice += "\nPlease review the pull request and leave feedback or approve."
+                    await self.github_client.create_issue_comment(repo, issue_number, issue_notice)
                 except Exception:
                     pass
             except Exception as pr_err:
