@@ -170,10 +170,17 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
   # 1. Initialize Terraform
   terraform init
 
-  # 2. Preview infrastructure changes
+  # 2. Adopt the pre-created Artifact Registry repository into Terraform state
+  terraform import \
+    -var="project_id=$GCP_PROJECT_ID" \
+    -var="region=$GCP_REGION" \
+    google_artifact_registry_repository.repo \
+    "projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/mathlore-forge"
+
+  # 3. Preview infrastructure changes
   terraform plan -var="project_id=$GCP_PROJECT_ID" -var="region=$GCP_REGION"
 
-  # 3. Apply and provision resources
+  # 4. Apply and provision resources
   terraform apply -var="project_id=$GCP_PROJECT_ID" -var="region=$GCP_REGION"
   ```
 - **Why it is needed**:

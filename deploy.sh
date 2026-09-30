@@ -598,6 +598,37 @@ else
     fi
 fi
 
+# Adopt pre-existing resources into Terraform state to prevent 409 Conflict errors
+print_info "Synchronizing existing GCP infrastructure into ${TF_CMD} state..."
+TF_STATE_LIST=$(cd "${TF_DIR}" && ${TF_CMD} state list 2>/dev/null || true)
+
+# 1. Artifact Registry Repository
+if ! echo "$TF_STATE_LIST" | grep -F -q "google_artifact_registry_repository.repo"; then
+    if gcloud artifacts repositories describe mathlore-forge --location="${GCP_REGION}" >/dev/null 2>&1; then
+        print_info "Adopting existing Artifact Registry repository into ${TF_CMD} state..."
+        confirm_run "cd '${TF_DIR}' && ${TF_CMD} import google_artifact_registry_repository.repo 'projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/repositories/mathlore-forge'"
+    fi
+fi
+
+# 2. Secret Manager Secrets
+SYNC_SECRETS=("GEMINI_API_KEY" "GITHUB_TOKEN" "GITHUB_WEBHOOK_SECRET" "GOOGLE_CLIENT_ID" "GOOGLE_CLIENT_SECRET" "SESSION_SECRET_KEY")
+for sec_name in "${SYNC_SECRETS[@]}"; do
+    if ! echo "$TF_STATE_LIST" | grep -F -q "google_secret_manager_secret.secrets[\"${sec_name}\"]"; then
+        if gcloud secrets describe "${sec_name}" >/dev/null 2>&1; then
+            print_info "Adopting existing secret '${sec_name}' into ${TF_CMD} state..."
+            confirm_run "cd '${TF_DIR}' && ${TF_CMD} import 'google_secret_manager_secret.secrets[\"${sec_name}\"]' 'projects/${GCP_PROJECT_ID}/secrets/${sec_name}'"
+        fi
+    fi
+done
+
+# 3. Dedicated Service Account
+if ! echo "$TF_STATE_LIST" | grep -F -q "google_service_account.forge_sa"; then
+    if gcloud iam service-accounts describe "mathlore-forge-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com" >/dev/null 2>&1; then
+        print_info "Adopting existing service account 'mathlore-forge-sa' into ${TF_CMD} state..."
+        confirm_run "cd '${TF_DIR}' && ${TF_CMD} import google_service_account.forge_sa 'projects/${GCP_PROJECT_ID}/serviceAccounts/mathlore-forge-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com'"
+    fi
+fi
+
 # Terraform / OpenTofu Plan
 print_info "Previewing ${TF_CMD} infrastructure execution plan..."
 confirm_run "cd '${TF_DIR}' && ${TF_CMD} plan"
