@@ -159,6 +159,49 @@ def search(
     console.print(out)
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host interface to bind to."),
+    port: int = typer.Option(8080, "--port", "-p", help="Port to listen on."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development."),
+) -> None:
+    """Start the Mathlore Forge Web Dashboard and Webhook server."""
+    import uvicorn
+    console.print(f"[bold green]🚀 Starting Mathlore Forge Web Dashboard on http://{host}:{port}...[/bold green]")
+    uvicorn.run("mathlore_forge.web.app:app", host=host, port=port, reload=reload)
+
+
+@app.command()
+def worker(
+    repo: str = typer.Option("mathlingua/mathlore", "--repo", "-r", help="Target repository."),
+    issue: Optional[int] = typer.Option(None, "--issue", "-i", help="Issue number to author content for."),
+    pr: Optional[int] = typer.Option(None, "--pr", help="Pull request number to address review comments for."),
+    flywheel_pr: Optional[int] = typer.Option(None, "--flywheel-pr", help="PR number to run flywheel reflection on and merge."),
+) -> None:
+    """Execute a long-running agent worker task (ideal for GCP Cloud Run Jobs)."""
+    from mathlore_forge.storage.db import init_db
+    from mathlore_forge.workflows.authoring_flow import AuthoringFlow
+    from mathlore_forge.workflows.review_flow import ReviewFlow
+    from mathlore_forge.workflows.flywheel_flow import FlywheelFlow
+
+    db_mgr = init_db()
+    with db_mgr.get_session() as session:
+        if issue is not None:
+            console.print(f"[bold cyan]🤖 Starting Authoring Worker for {repo}#{issue}...[/bold cyan]")
+            flow = AuthoringFlow()
+            asyncio.run(flow.execute(repo=repo, issue_number=issue, db_session=session))
+        elif pr is not None:
+            console.print(f"[bold cyan]🔍 Starting Review Resolution Worker for {repo}#{pr}...[/bold cyan]")
+            flow = ReviewFlow()
+            asyncio.run(flow.execute(repo=repo, pr_number=pr, db_session=session))
+        elif flywheel_pr is not None:
+            console.print(f"[bold magenta]🔄 Starting Flywheel Self-Improvement for {repo}#{flywheel_pr}...[/bold magenta]")
+            flow = FlywheelFlow()
+            asyncio.run(flow.execute(mathlore_repo=repo, pr_number=flywheel_pr, db_session=session))
+        else:
+            console.print("[bold red]Please specify --issue, --pr, or --flywheel-pr.[/bold red]")
+
+
 def main() -> None:
     """Entry point for the CLI."""
     app()

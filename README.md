@@ -118,3 +118,50 @@ mlg-golden clean --all
 mlg-golden clean --passed
 ```
 
+## Autonomous Workflow & Web Dashboard
+
+Mathlore Forge includes a real-time web dashboard and automated GitHub workflow engine:
+- **Webhook Receiver**: Listens for issues, pull request reviews, and comments from Dominic Kramer.
+- **Authoring Worker**: Automatically checks out `mathlore`, authors content, checks via `mlg`, and opens PRs.
+- **Review Loop**: Automatically addresses review feedback from Dominic and updates PRs.
+- **Self-Improvement Flywheel**: Synthesizes new rules in `skills/mathlore-learned-guidelines/SKILL.md` and golden tests before merging.
+- **Google OAuth Dashboard**: Real-time visibility into running agents, complete trajectories, and controls, restricted to `DominicKramer@gmail.com`.
+
+### 1. Running Locally (Try Before Rollout)
+```bash
+# Start the Web Dashboard and Webhook server on http://localhost:8080
+uv run mathlore-forge serve --port 8080 --reload
+
+# Run worker task locally against an issue or PR
+uv run mathlore-forge worker --repo mathlingua/mathlore --issue 42
+uv run mathlore-forge worker --repo mathlingua/mathlore --pr 43
+```
+
+### 2. Creating a New Deployment on GCP
+```bash
+export GCP_PROJECT_ID="your-project-id"
+export GCP_REGION="us-central1"
+
+# Deploys Cloud Run service and Cloud Run Jobs
+./infra/deploy.sh
+```
+
+### 3. Updating an Existing Deployment (Rollout Changes)
+```bash
+TAG=$(git rev-parse --short HEAD)
+IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/mathlore-forge/app:${TAG}"
+
+gcloud builds submit --tag "$IMAGE" -f infra/Dockerfile .
+gcloud run deploy mathlore-forge-web --image "$IMAGE" --region "$GCP_REGION"
+gcloud run jobs update mathlore-forge-worker --image "$IMAGE" --region "$GCP_REGION"
+```
+
+### 4. Tearing Down & Stopping All Instances
+```bash
+# Deletes Cloud Run service, worker job, Docker images, and stops all costs
+./infra/teardown.sh
+```
+
+For full step-by-step instructions (with explanations of what each step does and why it is needed), GitHub webhook setup, secret configurations, and instant rollback procedures, see the comprehensive guide:
+👉 **[DEPLOYMENT.md](DEPLOYMENT.md)**
+

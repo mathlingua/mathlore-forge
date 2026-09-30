@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Mathlore Forge{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Top Stats Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Active Runs</span>
+                <i class="fa-solid fa-bolt text-amber-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.active_runs }}</div>
+            <div class="text-xs text-slate-500 mt-1">Autonomous agents currently working</div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Awaiting Review</span>
+                <i class="fa-solid fa-code-pull-request text-indigo-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.awaiting_review }}</div>
+            <div class="text-xs text-slate-500 mt-1">PRs ready for Dominic's feedback</div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Completed Tasks</span>
+                <i class="fa-solid fa-circle-check text-emerald-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.completed_runs }}</div>
+            <div class="text-xs text-slate-500 mt-1">Successfully merged into mathlore</div>
+        </div>
+
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Total Tokens Used</span>
+                <i class="fa-solid fa-brain text-purple-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ "{:,}".format(stats.total_tokens) }}</div>
+            <div class="text-xs text-slate-500 mt-1">Gemini 3.8 reasoning & authoring</div>
+        </div>
+    </div>
+
+    <!-- Action Bar & Filter -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-xl font-bold text-white tracking-tight">Agent Trajectories & Runs</h2>
+            <p class="text-sm text-slate-400">Real-time status of all autonomous Mathlingua authoring and flywheel cycles</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="document.getElementById('manual-run-modal').classList.remove('hidden')" class="px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition">
+                <i class="fa-solid fa-play"></i>
+                <span>Trigger Manual Run</span>
+            </button>
+            <button onclick="location.reload()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition" title="Refresh">
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Runs Table -->
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-slate-900/90 border-b border-slate-800 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <tr>
+                        <th class="py-3.5 px-4">Run ID / Type</th>
+                        <th class="py-3.5 px-4">Target Repo & Issue</th>
+                        <th class="py-3.5 px-4">Status</th>
+                        <th class="py-3.5 px-4">Tokens / Duration</th>
+                        <th class="py-3.5 px-4">Branch / PR</th>
+                        <th class="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60 font-normal">
+                    {% for run in runs %}
+                    <tr class="hover:bg-slate-800/30 transition">
+                        <td class="py-3.5 px-4">
+                            <div class="font-mono text-xs font-semibold text-indigo-300">{{ run.id }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">{{ run.run_type.value }}</div>
+                        </td>
+                        <td class="py-3.5 px-4">
+                            <div class="text-xs font-medium text-slate-200">{{ run.repo }}</div>
+                            {% if run.issue_number %}
+                            <a href="https://github.com/{{ run.repo }}/issues/{{ run.issue_number }}" target="_blank" class="text-xs text-indigo-400 hover:underline">
+                                Issue #{{ run.issue_number }}
+                            </a>
+                            {% else %}
+                            <span class="text-xs text-slate-500">Ad-hoc run</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4">
+                            {% if run.status.value == "RUNNING" %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                                Running
+                            </span>
+                            {% elif run.status.value == "AWAITING_REVIEW" %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                                <i class="fa-regular fa-clock text-[10px]"></i>
+                                Awaiting Review
+                            </span>
+                            {% elif run.status.value == "COMPLETED" %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                <i class="fa-solid fa-check text-[10px]"></i>
+                                Completed
+                            </span>
+                            {% elif run.status.value == "FAILED" %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                <i class="fa-solid fa-circle-exclamation text-[10px]"></i>
+                                Failed
+                            </span>
+                            {% elif run.status.value == "CANCELLED" %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">
+                                Cancelled
+                            </span>
+                            {% else %}
+                            <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400">
+                                {{ run.status.value }}
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-xs">
+                            <div class="text-slate-200 font-mono">{{ "{:,}".format(run.total_tokens) }} tokens</div>
+                            <div class="text-slate-500">{{ "%.1f"|format(run.duration_seconds) }}s</div>
+                        </td>
+                        <td class="py-3.5 px-4 text-xs font-mono">
+                            {% if run.pr_number %}
+                            <a href="https://github.com/{{ run.repo }}/pull/{{ run.pr_number }}" target="_blank" class="text-indigo-400 hover:underline flex items-center gap-1">
+                                <i class="fa-solid fa-code-pull-request"></i> PR #{{ run.pr_number }}
+                            </a>
+                            {% elif run.branch_name %}
+                            <span class="text-slate-400 truncate max-w-[150px] inline-block">{{ run.branch_name }}</span>
+                            {% else %}
+                            <span class="text-slate-600">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-3.5 px-4 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="/runs/{{ run.id }}" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition" title="Inspect Trajectory & Diff">
+                                    Trajectory
+                                </a>
+                                {% if run.status.value == "RUNNING" %}
+                                <button onclick="cancelRun('{{ run.id }}')" class="p-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs transition" title="Stop / Cancel Run">
+                                    <i class="fa-solid fa-stop"></i>
+                                </button>
+                                {% endif %}
+                                {% if run.status.value in ["FAILED", "CANCELLED"] %}
+                                <button onclick="restartRun('{{ run.id }}')" class="p-1.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs transition" title="Restart Run">
+                                    <i class="fa-solid fa-rotate-right"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-slate-500 text-xs">
+                            No runs recorded yet. Create an issue with label <code class="text-indigo-300">forge</code> in GitHub to trigger the autonomous authoring workflow!
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Manual Run Modal -->
+<div id="manual-run-modal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white">Trigger Manual Authoring Run</h3>
+            <button onclick="document.getElementById('manual-run-modal').classList.add('hidden')" class="text-slate-500 hover:text-slate-300">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <form onsubmit="handleManualRun(event)" class="space-y-4">
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Target Repository</label>
+                <input type="text" id="manual-repo" value="mathlingua/mathlore" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">GitHub Issue Number</label>
+                <input type="number" id="manual-issue" placeholder="e.g. 42" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono">
+            </div>
+            <div class="pt-2 flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('manual-run-modal').classList.add('hidden')" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition">
+                    Start Agent Run
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+async function cancelRun(runId) {
+    if (!confirm('Are you sure you want to cancel this agent run?')) return;
+    const resp = await fetch(`/api/runs/${runId}/cancel`, { method: 'POST' });
+    if (resp.ok) {
+        location.reload();
+    } else {
+        alert('Failed to cancel run');
+    }
+}
+
+async function restartRun(runId) {
+    if (!confirm('Rerun this task?')) return;
+    const resp = await fetch(`/api/runs/${runId}/restart`, { method: 'POST' });
+    if (resp.ok) {
+        location.reload();
+    } else {
+        alert('Failed to restart run');
+    }
+}
+
+async function handleManualRun(e) {
+    e.preventDefault();
+    const repo = document.getElementById('manual-repo').value;
+    const issue = parseInt(document.getElementById('manual-issue').value);
+    const resp = await fetch('/api/runs/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo, issue_number: issue })
+    });
+    if (resp.ok) {
+        document.getElementById('manual-run-modal').classList.add('hidden');
+        location.reload();
+    } else {
+        alert('Failed to queue manual run');
+    }
+}
+</script>
+{% endblock %}

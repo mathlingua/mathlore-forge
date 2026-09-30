@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Trajectory - {{ run.id }} - Mathlore Forge{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header Bar -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div class="space-y-1">
+            <div class="flex items-center gap-3">
+                <a href="/" class="text-slate-400 hover:text-white text-sm">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Runs
+                </a>
+                <span class="text-slate-600">/</span>
+                <span class="font-mono text-sm font-bold text-indigo-300">{{ run.id }}</span>
+                {% if run.status.value == "RUNNING" %}
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                    Live Streaming
+                </span>
+                {% else %}
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300">
+                    {{ run.status.value }}
+                </span>
+                {% endif %}
+            </div>
+            <h1 class="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                <span>{{ run.run_type.value }}</span>
+                {% if run.issue_number %}
+                <span class="text-slate-400 font-normal text-base">for Issue #{{ run.issue_number }}</span>
+                {% endif %}
+            </h1>
+            <div class="text-xs text-slate-400 flex flex-wrap gap-4 pt-1 font-mono">
+                <span>Repo: <a href="https://github.com/{{ run.repo }}" target="_blank" class="text-indigo-400 hover:underline">{{ run.repo }}</a></span>
+                {% if run.branch_name %}
+                <span>Branch: <span class="text-slate-300">{{ run.branch_name }}</span></span>
+                {% endif %}
+                {% if run.pr_number %}
+                <span>PR: <a href="https://github.com/{{ run.repo }}/pull/{{ run.pr_number }}" target="_blank" class="text-indigo-400 hover:underline">#{{ run.pr_number }}</a></span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex items-center gap-3">
+            {% if run.status.value == "RUNNING" %}
+            <button onclick="cancelCurrentRun()" class="px-4 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-rose-600/20 transition">
+                <i class="fa-solid fa-stop"></i>
+                <span>Stop Agent</span>
+            </button>
+            {% else %}
+            <button onclick="restartCurrentRun()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 transition">
+                <i class="fa-solid fa-rotate-right"></i>
+                <span>Restart Run</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Telemetry Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-xs">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <div class="text-slate-500 text-[11px] mb-1">DURATION</div>
+            <div class="text-lg font-bold text-slate-200">{{ "%.1f"|format(run.duration_seconds) }}s</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <div class="text-slate-500 text-[11px] mb-1">THOUGHTS TOKENS</div>
+            <div class="text-lg font-bold text-purple-400">{{ "{:,}".format(run.thoughts_tokens) }}</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <div class="text-slate-500 text-[11px] mb-1">CANDIDATE TOKENS</div>
+            <div class="text-lg font-bold text-indigo-400">{{ "{:,}".format(run.candidates_tokens) }}</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <div class="text-slate-500 text-[11px] mb-1">TOTAL TOKENS</div>
+            <div class="text-lg font-bold text-slate-200">{{ "{:,}".format(run.total_tokens) }}</div>
+        </div>
+    </div>
+
+    <!-- Error Alert if failed -->
+    {% if run.error_message %}
+    <div class="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-5 text-rose-300">
+        <div class="flex items-center gap-2 font-bold text-sm mb-2 text-rose-400">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>Error Encountered</span>
+        </div>
+        <pre class="text-xs bg-slate-950 p-4 rounded-xl overflow-x-auto text-rose-200 whitespace-pre-wrap font-mono">{{ run.error_message }}</pre>
+    </div>
+    {% endif %}
+
+    <!-- Tabs Navigation -->
+    <div class="border-b border-slate-800 flex space-x-6 text-sm font-medium">
+        <button onclick="switchTab('thoughts')" id="tab-btn-thoughts" class="py-3 border-b-2 border-indigo-500 text-indigo-400">
+            <i class="fa-solid fa-brain mr-1.5"></i> Trajectory & Reasoning
+        </button>
+        <button onclick="switchTab('tools')" id="tab-btn-tools" class="py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-screwdriver-wrench mr-1.5"></i> Tool Calls ({{ trajectory.tool_calls|length if trajectory else 0 }})
+        </button>
+        <button onclick="switchTab('diff')" id="tab-btn-diff" class="py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-code-compare mr-1.5"></i> Unified Diff
+        </button>
+        <button onclick="switchTab('prompt')" id="tab-btn-prompt" class="py-3 border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-terminal mr-1.5"></i> Initial Prompt & Summary
+        </button>
+    </div>
+
+    <!-- Tab 1: Reasoning & Thoughts -->
+    <div id="tab-content-thoughts" class="space-y-4">
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                <span>Agent Execution Stream</span>
+                <span id="stream-status" class="text-xs text-slate-500 font-mono">SSE Connected</span>
+            </h3>
+
+            <div id="live-stream-container" class="space-y-3 font-mono text-xs">
+                {% if trajectory and trajectory.thoughts %}
+                    {% for thought in trajectory.thoughts %}
+                    <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300">
+                        <div class="text-[10px] text-purple-400 uppercase font-bold tracking-wider mb-1 flex items-center gap-1">
+                            <i class="fa-solid fa-lightbulb"></i> Agent Thought
+                        </div>
+                        <div class="whitespace-pre-wrap leading-relaxed">{{ thought }}</div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-slate-500 py-6 text-center">
+                        Waiting for agent thoughts and reasoning steps...
+                    </div>
+                {% endif %}
+            </div>
+
+            {% if run.summary %}
+            <div class="mt-6 pt-6 border-t border-slate-800">
+                <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2">Final Assistant Output</h4>
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-5 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+                    {{ run.summary }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tab 2: Tool Calls -->
+    <div id="tab-content-tools" class="hidden space-y-4">
+        {% if trajectory and trajectory.tool_calls %}
+            <div class="space-y-3 font-mono text-xs">
+                {% for call in trajectory.tool_calls %}
+                <details class="bg-slate-900/80 border border-slate-800 rounded-xl overflow-hidden group">
+                    <summary class="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-800/40 select-none">
+                        <div class="flex items-center gap-3">
+                            <span class="w-6 h-6 rounded bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold">
+                                {{ loop.index }}
+                            </span>
+                            <span class="font-bold text-indigo-300">{{ call.name }}</span>
+                            {% if call.error %}
+                            <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 text-[10px] border border-rose-500/20 font-sans font-semibold">Error</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px] border border-emerald-500/20 font-sans font-semibold">Clean Pass</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-slate-500 text-[11px] flex items-center gap-3">
+                            <span>{{ "%.1f"|format(call.duration_ms) }}ms</span>
+                            <i class="fa-solid fa-chevron-down group-open:rotate-180 transition"></i>
+                        </div>
+                    </summary>
+                    <div class="p-4 pt-0 space-y-3 border-t border-slate-800/60 bg-slate-950/60">
+                        <div>
+                            <div class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Arguments</div>
+                            <pre class="p-3 bg-slate-950 rounded-lg text-slate-300 overflow-x-auto whitespace-pre-wrap">{{ call.args|tojson(indent=2) }}</pre>
+                        </div>
+                        <div>
+                            <div class="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1">Result</div>
+                            <pre class="p-3 bg-slate-950 rounded-lg text-slate-300 overflow-x-auto whitespace-pre-wrap">{{ call.result }}</pre>
+                        </div>
+                    </div>
+                </details>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+                No tool calls recorded for this run.
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab 3: Git Diff -->
+    <div id="tab-content-diff" class="hidden space-y-4">
+        {% if run.diff_patch %}
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div class="p-4 bg-slate-900 border-b border-slate-800 text-xs font-mono text-slate-400 flex items-center justify-between">
+                <span>Unified Patch</span>
+                <span>Branch: {{ run.branch_name }}</span>
+            </div>
+            <pre class="p-6 bg-slate-950 overflow-x-auto font-mono text-xs leading-relaxed">
+{% for line in run.diff_patch.split('\n') %}{% if line.startswith('+') and not line.startswith('+++') %}<span class="diff-add block">{{ line }}</span>{% elif line.startswith('-') and not line.startswith('---') %}<span class="diff-del block">{{ line }}</span>{% else %}<span class="text-slate-400 block">{{ line }}</span>{% endif %}{% endfor %}</pre>
+        </div>
+        {% else %}
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+            No git diff patch recorded for this run.
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab 4: Prompt & Goal -->
+    <div id="tab-content-prompt" class="hidden space-y-4">
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wider text-slate-400">Initial Agent Prompt</h3>
+            <pre class="p-4 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 text-xs font-mono whitespace-pre-wrap">{{ run.prompt }}</pre>
+        </div>
+    </div>
+</div>
+
+<script>
+function switchTab(tab) {
+    ['thoughts', 'tools', 'diff', 'prompt'].forEach(t => {
+        document.getElementById(`tab-content-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-btn-${t}`);
+        btn.classList.remove('border-indigo-500', 'text-indigo-400');
+        btn.classList.add('border-transparent', 'text-slate-400');
+    });
+    document.getElementById(`tab-content-${tab}`).classList.remove('hidden');
+    const activeBtn = document.getElementById(`tab-btn-${tab}`);
+    activeBtn.classList.remove('border-transparent', 'text-slate-400');
+    activeBtn.classList.add('border-indigo-500', 'text-indigo-400');
+}
+
+async function cancelCurrentRun() {
+    if (!confirm('Cancel this running agent?')) return;
+    const resp = await fetch('/api/runs/{{ run.id }}/cancel', { method: 'POST' });
+    if (resp.ok) location.reload();
+}
+
+async function restartCurrentRun() {
+    if (!confirm('Restart this task?')) return;
+    const resp = await fetch('/api/runs/{{ run.id }}/restart', { method: 'POST' });
+    if (resp.ok) location.reload();
+}
+
+// Live SSE Stream setup if running
+{% if run.status.value == "RUNNING" %}
+const eventSource = new EventSource('/api/runs/{{ run.id }}/stream');
+eventSource.addEventListener('update', (e) => {
+    const data = JSON.parse(e.data);
+    const container = document.getElementById('live-stream-container');
+    const item = document.createElement('div');
+    item.className = 'bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300';
+    item.innerHTML = `<div class="text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">${data.event}</div><div>${JSON.stringify(data)}</div>`;
+    container.appendChild(item);
+});
+{% endif %}
+</script>
+{% endblock %}

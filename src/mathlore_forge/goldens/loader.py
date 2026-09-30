@@ -79,3 +79,7 @@ def discover_test_cases(
             continue
 
     return cases
+
+
+# Alias for compatibility
+load_golden_test_specs = discover_test_cases

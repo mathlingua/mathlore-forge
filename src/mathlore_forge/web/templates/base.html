@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Mathlore Forge Dashboard{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <style>
+        pre, code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .diff-add { background-color: rgba(34, 197, 94, 0.15); color: #86efac; }
+        .diff-del { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans">
+    <!-- Navbar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <a href="/" class="flex items-center space-x-3 text-white font-bold text-xl tracking-tight">
+                    <span class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+                        <i class="fa-solid fa-square-root-variable text-sm"></i>
+                    </span>
+                    <span>Mathlore <span class="text-indigo-400 font-mono text-base font-semibold">Forge</span></span>
+                </a>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Antigravity Harness
+                </span>
+            </div>
+
+            <!-- Navigation Links -->
+            <nav class="flex items-center space-x-6 text-sm font-medium">
+                <a href="/" class="text-slate-200 hover:text-white transition">Agent Runs</a>
+                <a href="/flywheel" class="text-slate-400 hover:text-white transition">Flywheel & Skills</a>
+                <a href="https://github.com/mathlingua/mathlore" target="_blank" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-brands fa-github mr-1"></i> mathlore
+                </a>
+                <a href="https://github.com/mathlingua/mathlore-forge" target="_blank" class="text-slate-400 hover:text-white transition">
+                    <i class="fa-brands fa-github mr-1"></i> mathlore-forge
+                </a>
+            </nav>
+
+            <!-- User Auth Profile -->
+            <div class="flex items-center space-x-3">
+                {% if user %}
+                <div class="flex items-center space-x-2 text-xs text-slate-300 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700">
+                    <i class="fa-regular fa-user-circle text-indigo-400 text-sm"></i>
+                    <span class="font-mono text-slate-200">{{ user.email }}</span>
+                </div>
+                <a href="/auth/logout" class="text-xs text-slate-400 hover:text-rose-400 transition" title="Log out">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </a>
+                {% else %}
+                <a href="/login" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition font-medium">
+                    Sign in with Google
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-900 bg-slate-950 py-4 text-center text-xs text-slate-600">
+        Mathlore Forge Autonomous Engine &bull; Google Cloud Platform &bull; Powered by Google Antigravity & Mathlingua
+    </footer>
+</body>
+</html>
