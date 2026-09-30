@@ -523,6 +523,9 @@ print_step "8" "Provision Secret Manager Slots & Payloads"
 echo -e "  Cloud Run mounts secrets directly from Secret Manager at runtime."
 echo -e "  This guarantees credentials are never baked into container images or Git."
 
+print_info "Ensuring Secret Manager API is enabled..."
+confirm_run "gcloud services enable secretmanager.googleapis.com"
+
 declare -A SECRETS_MAP=(
     ["GEMINI_API_KEY"]="${GEMINI_API_KEY}"
     ["GITHUB_TOKEN"]="${GITHUB_TOKEN}"
@@ -628,6 +631,23 @@ if ! echo "$TF_STATE_LIST" | grep -F -q "google_service_account.forge_sa"; then
         confirm_run "cd '${TF_DIR}' && ${TF_CMD} import google_service_account.forge_sa 'projects/${GCP_PROJECT_ID}/serviceAccounts/mathlore-forge-sa@${GCP_PROJECT_ID}.iam.gserviceaccount.com'"
     fi
 fi
+
+# 4. Verify Secret Payloads exist so Cloud Run does not fail mounting /versions/latest
+print_info "Verifying Secret Manager payloads exist for Cloud Run environment injection..."
+for sec_name in "${SYNC_SECRETS[@]}"; do
+    HAS_VER=$(gcloud secrets versions list "$sec_name" --filter="state:ENABLED" --format="value(name)" 2>/dev/null | head -n 1 || true)
+    if [ -z "$HAS_VER" ]; then
+        sec_val="${!sec_name:-}"
+        if [ -n "$sec_val" ]; then
+            print_info "Adding initial payload version for '${sec_name}'..."
+            real_cmd="echo -n '${sec_val}' | gcloud secrets versions add '${sec_name}' --data-file=-"
+            disp_cmd="echo -n '********' | gcloud secrets versions add '${sec_name}' --data-file=-"
+            confirm_run "$real_cmd" "$disp_cmd"
+        else
+            print_warning "No payload version found for '${sec_name}'. Cloud Run requires at least one version."
+        fi
+    fi
+done
 
 # Terraform / OpenTofu Plan
 print_info "Previewing ${TF_CMD} infrastructure execution plan..."

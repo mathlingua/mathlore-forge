@@ -161,7 +161,46 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
 
 ---
 
-### Step 6: Provision Infrastructure with Terraform
+### Step 6: Create Secret Manager Slots & Populate Secret Payloads
+- **What to do**:
+  Cloud Run requires secret versions (`/versions/latest`) to exist at creation time. Ensure Secret Manager is enabled and populate the secret versions:
+
+  ```bash
+  # 1. Enable Secret Manager API
+  gcloud services enable secretmanager.googleapis.com
+
+  # 2. Gemini API Key (for Google Antigravity Agent reasoning and authoring)
+  gcloud secrets create GEMINI_API_KEY --replication-policy=automatic 2>/dev/null || true
+  echo -n "your-gemini-api-key" | gcloud secrets versions add GEMINI_API_KEY --data-file=-
+
+  # 3. GitHub Token (from Step 4)
+  gcloud secrets create GITHUB_TOKEN --replication-policy=automatic 2>/dev/null || true
+  echo -n "github_pat_your_token_from_step_4" | gcloud secrets versions add GITHUB_TOKEN --data-file=-
+
+  # 4. GitHub Webhook Secret (Shared secret to verify webhook HMAC SHA-256 signatures)
+  gcloud secrets create GITHUB_WEBHOOK_SECRET --replication-policy=automatic 2>/dev/null || true
+  WEBHOOK_SECRET=$(openssl rand -hex 20)
+  echo -n "$WEBHOOK_SECRET" | gcloud secrets versions add GITHUB_WEBHOOK_SECRET --data-file=-
+  echo "Your GITHUB_WEBHOOK_SECRET is: $WEBHOOK_SECRET"
+
+  # 5. Google OAuth Client ID & Secret (from Step 3)
+  gcloud secrets create GOOGLE_CLIENT_ID --replication-policy=automatic 2>/dev/null || true
+  echo -n "your-client-id.apps.googleusercontent.com" | gcloud secrets versions add GOOGLE_CLIENT_ID --data-file=-
+
+  gcloud secrets create GOOGLE_CLIENT_SECRET --replication-policy=automatic 2>/dev/null || true
+  echo -n "your-client-secret" | gcloud secrets versions add GOOGLE_CLIENT_SECRET --data-file=-
+
+  # 6. Session Secret Key (Used to cryptographically sign session cookies)
+  gcloud secrets create SESSION_SECRET_KEY --replication-policy=automatic 2>/dev/null || true
+  openssl rand -hex 32 | gcloud secrets versions add SESSION_SECRET_KEY --data-file=-
+  ```
+
+- **Why it is needed**:
+  Cloud Run validates that every secret mounted into its environment exists with at least one active version (`latest`). Creating the slots and populating the payloads prior to running Terraform ensures Cloud Run boots successfully on its first attempt.
+
+---
+
+### Step 7: Provision Infrastructure with Terraform
 - **What to do**:
   Navigate to the Terraform directory and apply:
   ```bash
@@ -187,7 +226,7 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
   Terraform declaratively provisions:
   1. All required GCP APIs.
   2. The dedicated IAM Service Account (`mathlore-forge-sa`) and its least-privilege roles.
-  3. The Secret Manager secret slots.
+  3. The Secret Manager secret slots (adopting existing ones).
   4. The Cloud Run Service (`mathlore-forge-web`) configured with auto-scaling (0 to 5) and startup health probes.
   5. Public invoker access so GitHub can deliver webhooks.
   6. The Cloud Run Job (`mathlore-forge-worker`) with a 10-minute execution timeout (configurable via `worker_timeout`).
@@ -202,7 +241,7 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
 
 ---
 
-### Step 7: Add Your Production Cloud Run Domain to Google OAuth
+### Step 8: Add Your Production Cloud Run Domain to Google OAuth
 - **What to do**:
   Now that Cloud Run is deployed, you have your live production domain name (from the `dashboard_url` output above):
 
@@ -232,35 +271,6 @@ Follow these steps when setting up Mathlore Forge on GCP for the first time.
   Google OAuth strictly rejects any login request where the redirect URI is not pre-registered in the Google Cloud Console. Because Cloud Run generates its default HTTPS domain upon first deployment, adding the production URL is a quick 30-second step that connects Google's identity servers to your newly deployed Cloud Run domain. *(Changes take effect immediately; no rebuilding or redeployment of Cloud Run is required).*
 
   > [!TIP] **Using a Custom Domain (Optional)**: If you map a custom domain (like `https://forge.mathlore.org`) to your Cloud Run service via Cloud Run Domain Mappings or Cloud Load Balancing, you can add `https://forge.mathlore.org/auth/callback` to the OAuth Authorized redirect URIs instead.
-
----
-
-### Step 8: Populate Secret Values in Secret Manager
-- **What to do**:
-  Terraform created the secret resources in Step 6. Now, add the secret version payloads:
-
-  ```bash
-  # 1. Gemini API Key (for Google Antigravity Agent reasoning and authoring)
-  echo -n "your-gemini-api-key" | gcloud secrets versions add GEMINI_API_KEY --data-file=-
-
-  # 2. GitHub Token (from Step 4)
-  echo -n "github_pat_your_token_from_step_4" | gcloud secrets versions add GITHUB_TOKEN --data-file=-
-
-  # 3. GitHub Webhook Secret (Shared secret to verify webhook HMAC SHA-256 signatures)
-  WEBHOOK_SECRET=$(openssl rand -hex 20)
-  echo -n "$WEBHOOK_SECRET" | gcloud secrets versions add GITHUB_WEBHOOK_SECRET --data-file=-
-  echo "Your GITHUB_WEBHOOK_SECRET is: $WEBHOOK_SECRET"
-
-  # 4. Google OAuth Client ID & Secret (from Step 3)
-  echo -n "your-client-id.apps.googleusercontent.com" | gcloud secrets versions add GOOGLE_CLIENT_ID --data-file=-
-  echo -n "your-client-secret" | gcloud secrets versions add GOOGLE_CLIENT_SECRET --data-file=-
-
-  # 5. Session Secret Key (Used to cryptographically sign session cookies)
-  openssl rand -hex 32 | gcloud secrets versions add SESSION_SECRET_KEY --data-file=-
-  ```
-
-- **Why it is needed**:
-  Separating secret definitions (managed in Terraform) from secret data values (populated via CLI) prevents sensitive credentials from ever being stored in plain text inside `.tf` files or Git repositories.
 
 ---
 
