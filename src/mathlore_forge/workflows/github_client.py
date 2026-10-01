@@ -54,6 +54,9 @@ class GitHubPullRequest(BaseModel):
     merged: bool = False
 
 
+FORGE_BOT_MARKER = "<!-- mathlore-forge-bot -->"
+
+
 class GitHubClient:
     """Client for interacting with the GitHub REST API."""
 
@@ -199,6 +202,8 @@ class GitHubClient:
 
     async def reply_to_review_comment(self, repo: str, pr_number: int, comment_id: int, body: str) -> None:
         """Replies to a specific review comment thread on a Pull Request."""
+        if FORGE_BOT_MARKER not in body:
+            body = f"{FORGE_BOT_MARKER}\n\n{body}"
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.base_url}/repos/{repo}/pulls/{pr_number}/comments/{comment_id}/replies",
@@ -215,6 +220,8 @@ class GitHubClient:
                 "GITHUB_TOKEN is missing or empty in the runtime environment. "
                 "Please ensure GITHUB_TOKEN has an active version in GCP Secret Manager."
             )
+        if FORGE_BOT_MARKER not in body:
+            body = f"{FORGE_BOT_MARKER}\n\n{body}"
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.base_url}/repos/{repo}/issues/{issue_or_pr_number}/comments",
