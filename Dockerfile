@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Stage 1: Build the mlg compiler binary from the official Mathlingua repository
-FROM rust:1.85-slim-bookworm AS mlg-builder
+FROM rust:bookworm AS mlg-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
