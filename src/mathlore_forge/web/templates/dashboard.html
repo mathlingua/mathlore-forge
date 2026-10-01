@@ -60,6 +60,68 @@
         </div>
     </div>
 
+    <!-- Filters Toolbar -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-md">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <!-- Status Tabs -->
+            <div class="flex flex-wrap items-center gap-1.5 text-xs" id="status-filter-pills">
+                <button onclick="setStatusFilter('ALL')" data-filter="ALL" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm">
+                    <span>All</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">{{ status_counts.ALL }}</span>
+                </button>
+                <button onclick="setStatusFilter('AWAITING_REVIEW')" data-filter="AWAITING_REVIEW" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700">
+                    <i class="fa-regular fa-clock text-indigo-400"></i>
+                    <span>Awaiting Review</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-700 text-indigo-300">{{ status_counts.AWAITING_REVIEW }}</span>
+                </button>
+                <button onclick="setStatusFilter('RUNNING')" data-filter="RUNNING" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                    <span>Active</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-700 text-amber-300">{{ status_counts.RUNNING }}</span>
+                </button>
+                <button onclick="setStatusFilter('COMPLETED')" data-filter="COMPLETED" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700">
+                    <i class="fa-solid fa-check text-emerald-400"></i>
+                    <span>Completed</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-700 text-emerald-300">{{ status_counts.COMPLETED }}</span>
+                </button>
+                <button onclick="setStatusFilter('FAILED')" data-filter="FAILED" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700">
+                    <i class="fa-solid fa-circle-exclamation text-rose-400"></i>
+                    <span>Failed</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-700 text-rose-300">{{ status_counts.FAILED }}</span>
+                </button>
+                <button onclick="setStatusFilter('CANCELLED')" data-filter="CANCELLED" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700">
+                    <i class="fa-solid fa-ban text-slate-400"></i>
+                    <span>Cancelled</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-700 text-slate-300">{{ status_counts.CANCELLED }}</span>
+                </button>
+                {% if status_counts.ABANDONED > 0 %}
+                <button onclick="setStatusFilter('ABANDONED')" data-filter="ABANDONED" class="filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700">
+                    <i class="fa-solid fa-ban text-zinc-400"></i>
+                    <span>Abandoned</span>
+                    <span class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-700 text-zinc-300">{{ status_counts.ABANDONED }}</span>
+                </button>
+                {% endif %}
+            </div>
+
+            <!-- Search and Hide Inactive Toggle -->
+            <div class="flex items-center gap-4">
+                <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-300 hover:text-white whitespace-nowrap">
+                    <input type="checkbox" id="hide-inactive-toggle" onchange="toggleHideInactive(event)" class="rounded bg-slate-950 border-slate-700 text-indigo-600 focus:ring-0 w-3.5 h-3.5">
+                    <span>Hide Cancelled & Abandoned</span>
+                </label>
+                <div class="relative w-full sm:w-56">
+                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                    <input type="text" id="runs-search" oninput="handleSearch(event)" placeholder="Search runs, PRs, issues..." class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-800/60">
+            <span id="filter-counter">Showing all {{ runs|length }} runs</span>
+            <span id="filter-applied-hint" class="text-indigo-400/80"></span>
+        </div>
+    </div>
+
     <!-- Runs Table -->
     <div class="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div class="overflow-x-auto">
@@ -76,7 +138,11 @@
                 </thead>
                 <tbody class="divide-y divide-slate-800/60 font-normal">
                     {% for run in runs %}
-                    <tr class="hover:bg-slate-800/30 transition">
+                    <tr id="run-row-{{ run.id }}"
+                        data-run-id="{{ run.id }}"
+                        data-status="{{ run.status.value }}"
+                        data-search="{{ run.id }} {{ run.repo }} {{ run.issue_number or '' }} {{ run.pr_number or '' }} {{ run.branch_name or '' }} {{ run.run_type.value }}"
+                        class="run-row hover:bg-slate-800/30 transition">
                         <td class="py-3.5 px-4">
                             <div class="font-mono text-xs font-semibold text-indigo-300">{{ run.id }}</div>
                             <div class="text-xs text-slate-400 mt-0.5">{{ run.run_type.value }}</div>
@@ -120,6 +186,11 @@
                             {% elif run.status.value == "CANCELLED" %}
                             <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20">
                                 Cancelled
+                            </span>
+                            {% elif run.status.value == "ABANDONED" %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                                <i class="fa-solid fa-ban text-[10px]"></i>
+                                Abandoned
                             </span>
                             {% else %}
                             <span class="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-400">
@@ -167,6 +238,11 @@
                                 <a href="/runs/{{ run.id }}" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition" title="Inspect Trajectory & Diff">
                                     Trajectory
                                 </a>
+                                {% if run.status.value == "AWAITING_REVIEW" %}
+                                <button onclick="abandonRun('{{ run.id }}')" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 text-xs font-medium transition" title="Abandon this item (no longer applicable)">
+                                    <i class="fa-solid fa-ban mr-1"></i> Abandon
+                                </button>
+                                {% endif %}
                                 {% if run.status.value == "RUNNING" %}
                                 <button onclick="cancelRun('{{ run.id }}')" class="p-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs transition" title="Stop / Cancel Run">
                                     <i class="fa-solid fa-stop"></i>
@@ -181,7 +257,7 @@
                         </td>
                     </tr>
                     {% if run.summary %}
-                    <tr id="summary-row-{{ run.id }}" class="hidden bg-slate-950/70 border-b border-slate-800">
+                    <tr id="summary-row-{{ run.id }}" data-for-run="{{ run.id }}" class="hidden summary-row bg-slate-950/70 border-b border-slate-800">
                         <td colspan="6" class="p-5">
                             <div class="border border-emerald-500/20 bg-slate-950 rounded-xl p-4 font-mono text-xs text-slate-200 whitespace-pre-wrap max-h-96 overflow-y-auto leading-relaxed">
 {{ run.summary }}
@@ -196,6 +272,13 @@
                         </td>
                     </tr>
                     {% endfor %}
+                    <tr id="no-matching-runs-row" class="hidden">
+                        <td colspan="6" class="py-12 text-center text-slate-500 text-xs">
+                            <i class="fa-solid fa-filter text-slate-600 text-lg mb-2 block"></i>
+                            <span>No runs match the selected filter.</span>
+                            <button onclick="resetFilters()" class="text-indigo-400 hover:underline ml-2">Reset Filter</button>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -295,12 +378,149 @@ async function handleManualRun(e) {
     }
 }
 
+async function abandonRun(runId) {
+    if (!confirm('Mark this run as abandoned (no longer applicable)?')) return;
+    const resp = await fetch(`/api/runs/${runId}/abandon`, { method: 'POST' });
+    if (resp.ok) {
+        location.reload();
+    } else {
+        alert('Failed to abandon run');
+    }
+}
+
 function toggleSummary(id) {
     const row = document.getElementById(`summary-row-${id}`);
     if (row) {
         row.classList.toggle('hidden');
     }
 }
+
+// --- Remembered Table Filtering Logic ---
+const STATUS_STORAGE_KEY = 'mathlore_forge_status_filter';
+const HIDE_INACTIVE_STORAGE_KEY = 'mathlore_forge_hide_inactive';
+const SEARCH_STORAGE_KEY = 'mathlore_forge_search_query';
+
+let currentStatusFilter = localStorage.getItem(STATUS_STORAGE_KEY) || 'ALL';
+let currentHideInactive = localStorage.getItem(HIDE_INACTIVE_STORAGE_KEY) === 'true';
+let currentSearchQuery = localStorage.getItem(SEARCH_STORAGE_KEY) || '';
+
+function setStatusFilter(filter) {
+    currentStatusFilter = filter;
+    localStorage.setItem(STATUS_STORAGE_KEY, filter);
+    updatePillStyles();
+    applyFilters();
+}
+
+function toggleHideInactive(e) {
+    currentHideInactive = e.target.checked;
+    localStorage.setItem(HIDE_INACTIVE_STORAGE_KEY, currentHideInactive ? 'true' : 'false');
+    applyFilters();
+}
+
+function handleSearch(e) {
+    currentSearchQuery = e.target.value.trim().toLowerCase();
+    localStorage.setItem(SEARCH_STORAGE_KEY, currentSearchQuery);
+    applyFilters();
+}
+
+function resetFilters() {
+    currentStatusFilter = 'ALL';
+    currentHideInactive = false;
+    currentSearchQuery = '';
+    localStorage.setItem(STATUS_STORAGE_KEY, 'ALL');
+    localStorage.setItem(HIDE_INACTIVE_STORAGE_KEY, 'false');
+    localStorage.setItem(SEARCH_STORAGE_KEY, '');
+
+    const hideToggle = document.getElementById('hide-inactive-toggle');
+    if (hideToggle) hideToggle.checked = false;
+    const searchInput = document.getElementById('runs-search');
+    if (searchInput) searchInput.value = '';
+    updatePillStyles();
+    applyFilters();
+}
+
+function updatePillStyles() {
+    const pills = document.querySelectorAll('.filter-pill');
+    pills.forEach(pill => {
+        const filter = pill.getAttribute('data-filter');
+        if (filter === currentStatusFilter) {
+            pill.className = 'filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm';
+        } else {
+            pill.className = 'filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700';
+        }
+    });
+}
+
+function applyFilters() {
+    const rows = document.querySelectorAll('.run-row');
+    const noMatchRow = document.getElementById('no-matching-runs-row');
+    const counterEl = document.getElementById('filter-counter');
+    const hintEl = document.getElementById('filter-applied-hint');
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const runId = row.getAttribute('data-run-id');
+        const status = row.getAttribute('data-status');
+        const searchText = (row.getAttribute('data-search') || '').toLowerCase();
+        const summaryRow = document.getElementById(`summary-row-${runId}`);
+
+        let matchesStatus = true;
+        if (currentStatusFilter === 'ALL') {
+            if (currentHideInactive && (status === 'CANCELLED' || status === 'ABANDONED')) {
+                matchesStatus = false;
+            }
+        } else if (currentStatusFilter === 'RUNNING') {
+            matchesStatus = (status === 'RUNNING' || status === 'QUEUED');
+        } else {
+            matchesStatus = (status === currentStatusFilter);
+        }
+
+        let matchesSearch = true;
+        if (currentSearchQuery) {
+            matchesSearch = searchText.includes(currentSearchQuery);
+        }
+
+        if (matchesStatus && matchesSearch) {
+            row.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            row.classList.add('hidden');
+            if (summaryRow) {
+                summaryRow.classList.add('hidden');
+            }
+        }
+    });
+
+    if (noMatchRow) {
+        if (visibleCount === 0 && rows.length > 0) {
+            noMatchRow.classList.remove('hidden');
+        } else {
+            noMatchRow.classList.add('hidden');
+        }
+    }
+
+    if (counterEl) {
+        counterEl.innerText = `Showing ${visibleCount} of ${rows.length} runs`;
+    }
+
+    if (hintEl) {
+        let hints = [];
+        if (currentStatusFilter !== 'ALL') hints.push(`Status: ${currentStatusFilter.replace('_', ' ')}`);
+        if (currentHideInactive) hints.push('Hiding Cancelled/Abandoned');
+        if (currentSearchQuery) hints.push(`Search: "${currentSearchQuery}"`);
+        hintEl.innerText = hints.length > 0 ? `Active: ${hints.join(' • ')}` : '';
+    }
+}
+
+// Restore saved filter settings and execute filtering on page load
+document.addEventListener('DOMContentLoaded', () => {
+    updatePillStyles();
+    const hideToggle = document.getElementById('hide-inactive-toggle');
+    if (hideToggle) hideToggle.checked = currentHideInactive;
+    const searchInput = document.getElementById('runs-search');
+    if (searchInput) searchInput.value = currentSearchQuery;
+    applyFilters();
+});
 
 {% set has_running = runs | selectattr('status.value', 'equalto', 'RUNNING') | list | length > 0 %}
 {% if has_running %}

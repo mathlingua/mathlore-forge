@@ -18,6 +18,14 @@
                     <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
                     Live Streaming
                 </span>
+                {% elif run.status.value == "AWAITING_REVIEW" %}
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                    <i class="fa-regular fa-clock mr-1"></i> Awaiting Review
+                </span>
+                {% elif run.status.value == "ABANDONED" %}
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                    <i class="fa-solid fa-ban mr-1"></i> Abandoned
+                </span>
                 {% else %}
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-800 text-slate-300">
                     {{ run.status.value }}
@@ -48,6 +56,12 @@
                 <i class="fa-solid fa-book-open"></i>
                 <span>Rendered Preview</span>
             </a>
+            {% endif %}
+            {% if run.status.value == "AWAITING_REVIEW" %}
+            <button onclick="abandonCurrentRun()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-600/80 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition" title="Abandon this item (no longer applicable)">
+                <i class="fa-solid fa-ban"></i>
+                <span>Abandon Run</span>
+            </button>
             {% endif %}
             {% if run.status.value == "RUNNING" %}
             <button onclick="cancelCurrentRun()" class="px-4 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-rose-600/20 transition">
@@ -273,6 +287,12 @@ function switchTab(tab) {
 async function cancelCurrentRun() {
     if (!confirm('Cancel this running agent?')) return;
     const resp = await fetch('/api/runs/{{ run.id }}/cancel', { method: 'POST' });
+    if (resp.ok) location.reload();
+}
+
+async function abandonCurrentRun() {
+    if (!confirm('Mark this run as abandoned (no longer applicable)?')) return;
+    const resp = await fetch('/api/runs/{{ run.id }}/abandon', { method: 'POST' });
     if (resp.ok) location.reload();
 }
 

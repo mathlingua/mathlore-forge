@@ -48,6 +48,7 @@ class RunStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    ABANDONED = "ABANDONED"
 
 
 class RunType(str, enum.Enum):

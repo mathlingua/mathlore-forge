@@ -145,7 +145,7 @@ async def dashboard_page(
     user: dict[str, Any] = Depends(require_admin_user),
 ) -> Response:
     """Renders main dashboard page."""
-    runs = db.query(AgentRunRecord).order_by(desc(AgentRunRecord.started_at)).limit(30).all()
+    runs = db.query(AgentRunRecord).order_by(desc(AgentRunRecord.started_at)).limit(100).all()
 
     # Aggregate stats
     active_runs = db.query(func.count(AgentRunRecord.id)).filter(AgentRunRecord.status == RunStatus.RUNNING).scalar() or 0
@@ -160,6 +160,17 @@ async def dashboard_page(
         "total_tokens": int(total_tokens),
     }
 
+    # Counts for status filter pills
+    status_counts = {
+        "ALL": len(runs),
+        "AWAITING_REVIEW": sum(1 for r in runs if r.status == RunStatus.AWAITING_REVIEW),
+        "RUNNING": sum(1 for r in runs if r.status in (RunStatus.RUNNING, RunStatus.QUEUED)),
+        "COMPLETED": sum(1 for r in runs if r.status == RunStatus.COMPLETED),
+        "FAILED": sum(1 for r in runs if r.status == RunStatus.FAILED),
+        "CANCELLED": sum(1 for r in runs if r.status == RunStatus.CANCELLED),
+        "ABANDONED": sum(1 for r in runs if r.status == RunStatus.ABANDONED),
+    }
+
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -167,6 +178,7 @@ async def dashboard_page(
             "user": user,
             "runs": runs,
             "stats": stats,
+            "status_counts": status_counts,
         },
     )
 

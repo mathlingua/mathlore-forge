@@ -180,6 +180,49 @@ def cancel_run(
     return {"status": "ignored", "message": f"Run is already in status {run.status.value}."}
 
 
+@router.post("/runs/{run_id}/abandon")
+def abandon_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_admin_user),
+) -> dict[str, str]:
+    """Abandons a run (such as an obsolete awaiting-review or active run) as no longer applicable."""
+    run = db.query(AgentRunRecord).filter_by(id=run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    run.status = RunStatus.ABANDONED
+    run.error_message = "Abandoned as no longer applicable."
+
+    # If issue or PR is attached and not completed, mark as abandoned
+    if run.issue_id:
+        issue = db.query(IssueRecord).filter_by(id=run.issue_id).first()
+        if issue and issue.status not in ("COMPLETED", "MERGED"):
+            issue.status = "ABANDONED"
+            if issue.plan_status:
+                issue.plan_status = "ABANDONED"
+
+    if run.pr_id:
+        pr = db.query(PullRequestRecord).filter_by(id=run.pr_id).first()
+        if pr and pr.status not in ("COMPLETED", "MERGED"):
+            pr.status = "ABANDONED"
+
+    db.commit()
+
+    try:
+        from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
+        sync_db_to_gcs_now()
+    except Exception:
+        pass
+
+    # Signal cancellation event if it was running
+    if run_id in _ACTIVE_CANCEL_FLAGS:
+        _ACTIVE_CANCEL_FLAGS[run_id].set()
+
+    broadcast_run_event(run_id, {"event": "abandoned", "message": "Run marked as abandoned."})
+    return {"status": "success", "message": f"Run {run_id} marked as ABANDONED."}
+
+
 @router.post("/runs/{run_id}/restart")
 async def restart_run(
     run_id: str,
