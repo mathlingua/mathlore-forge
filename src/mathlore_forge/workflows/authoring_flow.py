@@ -27,8 +27,10 @@ from mathlore_forge.storage.db import (
     TrajectoryRecord,
 )
 from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
+from mathlore_forge.preview.preview_manager import build_pr_preview, get_preview_url, upload_preview_to_gcs
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubIssue, GitHubPullRequest
+from mathlore_forge.workflows.sanitizer import sanitize_author_summary
 
 
 def slugify(text: str) -> str:
@@ -164,8 +166,9 @@ class AuthoringFlow:
                     run_record.thoughts_tokens = getattr(usage, "thoughts_token_count", 0)
                     run_record.total_tokens = getattr(usage, "total_token_count", 0)
 
-            run_record.summary = response_text
-            trajectory.final_output = response_text
+            clean_summary = sanitize_author_summary(response_text)
+            run_record.summary = clean_summary
+            trajectory.final_output = clean_summary
 
             # 7. Collect git diff
             diff_patch = workspace.get_diff(base_ref="HEAD~1" if not workspace.has_changes() else None)
@@ -193,7 +196,7 @@ class AuthoringFlow:
                 f"### Autonomous Mathlore Authoring\n\n"
                 f"Resolves #{issue_number}.\n\n"
                 f"#### Summary of Changes\n"
-                f"{response_text}\n\n"
+                f"{clean_summary}\n\n"
                 f"---\n"
                 f"*Authored by Mathlore Forge with Google Antigravity Agent Harness.*"
             )
@@ -208,6 +211,28 @@ class AuthoringFlow:
                 )
                 run_record.pr_number = pr.number
                 run_record.status = RunStatus.AWAITING_REVIEW
+
+                # Build and upload rendered HTML documentation preview
+                preview_url = ""
+                try:
+                    docs_dir = build_pr_preview(workspace.workspace_dir, pr.number)
+                    await upload_preview_to_gcs(docs_dir, pr.number)
+                    preview_url = get_preview_url(pr.number)
+                    preview_banner = (
+                        f"> [!TIP]\n"
+                        f"> 📖 **Rendered Preview Available**: [View Rendered Mathlore Documentation]({preview_url})\n\n"
+                    )
+                    pr_body = preview_banner + pr_body
+                    try:
+                        await self.github_client.update_pull_request(
+                            repo=repo,
+                            pr_number=pr.number,
+                            body=pr_body,
+                        )
+                    except Exception as update_err:
+                        logger.warning("Failed updating PR body with preview banner: %s", update_err)
+                except Exception as preview_err:
+                    logger.warning("Failed building PR preview for PR #%s: %s", pr.number, preview_err)
 
                 # Create PR record
                 pr_record = PullRequestRecord(
@@ -227,11 +252,14 @@ class AuthoringFlow:
                 except Exception:
                     pass
 
+                preview_msg = f"- 📖 **Rendered Preview**: [View Rendered Documentation]({preview_url})\n" if preview_url else ""
+
                 try:
                     await self.github_client.create_issue_comment(
                         repo,
                         pr.number,
                         f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR.\n\n"
+                        f"{preview_msg}"
                         f"- To request changes: comment `/forge address`\n"
                         f"- To accept and merge: comment `/forge accept` (I will automatically run `mlg check`, self-heal any errors, wait for checks to pass, and merge into `main`)",
                     )
@@ -244,6 +272,8 @@ class AuthoringFlow:
                         f"🚀 **Pull Request opened:** #{pr.number} ({pr.html_url})\n\n"
                         f"- **Branch:** `{branch_name}`\n"
                     )
+                    if preview_url:
+                        issue_notice += f"- **Rendered Preview:** [View Rendered Documentation]({preview_url})\n"
                     if dashboard_url:
                         issue_notice += f"- **Dashboard Run:** [View Real-Time Agent Telemetry]({dashboard_url})\n"
                     issue_notice += "\nPlease review the pull request and leave feedback or approve."

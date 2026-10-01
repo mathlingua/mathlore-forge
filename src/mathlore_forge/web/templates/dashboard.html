@@ -133,9 +133,14 @@
                         </td>
                         <td class="py-3.5 px-4 text-xs font-mono">
                             {% if run.pr_number %}
-                            <a href="https://github.com/{{ run.repo }}/pull/{{ run.pr_number }}" target="_blank" class="text-indigo-400 hover:underline flex items-center gap-1">
-                                <i class="fa-solid fa-code-pull-request"></i> PR #{{ run.pr_number }}
-                            </a>
+                            <div class="flex items-center gap-2">
+                                <a href="https://github.com/{{ run.repo }}/pull/{{ run.pr_number }}" target="_blank" class="text-indigo-400 hover:underline flex items-center gap-1">
+                                    <i class="fa-solid fa-code-pull-request"></i> PR #{{ run.pr_number }}
+                                </a>
+                                <a href="/previews/{{ run.pr_number }}/" target="_blank" class="text-emerald-400 hover:text-emerald-300" title="Rendered PR Preview">
+                                    <i class="fa-solid fa-book-open"></i>
+                                </a>
+                            </div>
                             {% elif run.branch_name %}
                             <span class="text-slate-400 truncate max-w-[150px] inline-block">{{ run.branch_name }}</span>
                             {% else %}
@@ -144,6 +149,11 @@
                         </td>
                         <td class="py-3.5 px-4 text-right">
                             <div class="flex items-center justify-end gap-2">
+                                {% if run.pr_number %}
+                                <a href="/previews/{{ run.pr_number }}/" target="_blank" class="px-2.5 py-1 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-xs font-medium transition" title="View Rendered Documentation Preview">
+                                    <i class="fa-solid fa-book-open mr-1"></i> Preview
+                                </a>
+                                {% endif %}
                                 {% if run.summary %}
                                 <button onclick="toggleSummary('{{ run.id }}')" class="px-2.5 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 text-xs font-medium transition" title="Preview Mathlingua Output or Proposal">
                                     <i class="fa-solid fa-file-lines mr-1"></i> Output

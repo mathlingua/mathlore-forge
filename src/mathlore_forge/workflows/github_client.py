@@ -153,6 +153,43 @@ class GitHubClient:
                 html_url=data["html_url"],
             )
 
+    async def update_pull_request(
+        self,
+        repo: str,
+        pr_number: int,
+        title: str | None = None,
+        body: str | None = None,
+        state: str | None = None,
+    ) -> GitHubPullRequest:
+        """Updates a Pull Request's title, body, or state."""
+        payload: dict[str, Any] = {}
+        if title is not None:
+            payload["title"] = title
+        if body is not None:
+            payload["body"] = body
+        if state is not None:
+            payload["state"] = state
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.patch(
+                f"{self.base_url}/repos/{repo}/pulls/{pr_number}",
+                headers=self._headers(),
+                json=payload,
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return GitHubPullRequest(
+                number=data["number"],
+                title=data["title"],
+                body=data.get("body", "") or "",
+                head_branch=data["head"]["ref"],
+                base_branch=data["base"]["ref"],
+                head_sha=data.get("head", {}).get("sha", ""),
+                state=data["state"],
+                html_url=data["html_url"],
+            )
+
     async def get_pull_request(self, repo: str, pr_number: int) -> GitHubPullRequest:
         """Fetches Pull Request details."""
         async with httpx.AsyncClient() as client:

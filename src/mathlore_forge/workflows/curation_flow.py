@@ -35,6 +35,8 @@ from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.authoring_flow import slugify
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubIssue
+from mathlore_forge.preview.preview_manager import build_pr_preview, get_preview_url, upload_preview_to_gcs
+from mathlore_forge.workflows.sanitizer import sanitize_author_summary
 
 
 class CurationFlow:
@@ -465,7 +467,9 @@ class CurationFlow:
                     run_record.thoughts_tokens = getattr(usage, "thoughts_token_count", 0)
                     run_record.total_tokens = getattr(usage, "total_token_count", 0)
 
-            run_record.summary = response_text
+            clean_summary = sanitize_author_summary(response_text)
+            run_record.summary = clean_summary
+            trajectory.final_output = clean_summary
             diff_patch = workspace.get_diff()
             run_record.diff_patch = diff_patch
 
@@ -488,7 +492,7 @@ class CurationFlow:
                 f"### Autonomous Mathlore Plan Implementation\n\n"
                 f"Implements the approved curation plan for #{issue_number}.\n\n"
                 f"#### Summary of Changes\n"
-                f"{response_text}\n\n"
+                f"{clean_summary}\n\n"
                 f"---\n"
                 f"*Authored by Mathlore Forge Curator & Mathlingua Engine.*"
             )
@@ -505,6 +509,28 @@ class CurationFlow:
                 run_record.status = RunStatus.AWAITING_REVIEW
                 issue_record.status = "AWAITING_PR_REVIEW"
 
+                # Build and upload rendered HTML documentation preview
+                preview_url = ""
+                try:
+                    docs_dir = build_pr_preview(workspace.workspace_dir, pr.number)
+                    await upload_preview_to_gcs(docs_dir, pr.number)
+                    preview_url = get_preview_url(pr.number)
+                    preview_banner = (
+                        f"> [!TIP]\n"
+                        f"> 📖 **Rendered Preview Available**: [View Rendered Mathlore Documentation]({preview_url})\n\n"
+                    )
+                    pr_body = preview_banner + pr_body
+                    try:
+                        await self.github_client.update_pull_request(
+                            repo=repo,
+                            pr_number=pr.number,
+                            body=pr_body,
+                        )
+                    except Exception as update_err:
+                        logger.warning("Failed updating PR body with preview banner: %s", update_err)
+                except Exception as preview_err:
+                    logger.warning("Failed building PR preview for PR #%s: %s", pr.number, preview_err)
+
                 pr_record = PullRequestRecord(
                     repo=repo,
                     pr_number=pr.number,
@@ -516,13 +542,16 @@ class CurationFlow:
                 )
                 db_session.add(pr_record)
 
+                preview_msg = f"- 📖 **Rendered Preview**: [View Rendered Documentation]({preview_url})\n" if preview_url else ""
+
                 # Comment on issue linking to PR
                 await self.github_client.create_issue_comment(
                     repo=repo,
                     issue_or_pr_number=issue_number,
                     body=(
                         f"@{issue_record.author} The approved plan has been implemented and submitted in PR #{pr.number} ({pr.html_url})!\n\n"
-                        f"- **Live Agent Run**: [View Run on Mathlore Forge Dashboard]({dash_link})\n\n"
+                        f"- **Live Agent Run**: [View Run on Mathlore Forge Dashboard]({dash_link})\n"
+                        f"{preview_msg}\n"
                         f"Please review the pull request changes. You can comment `/forge accept` on the PR to validate and merge."
                     ),
                 )
@@ -532,6 +561,7 @@ class CurationFlow:
                         issue_or_pr_number=pr.number,
                         body=(
                             f"@{issue_record.author} The approved curation plan for issue #{issue_number} has been implemented.\n\n"
+                            f"{preview_msg}"
                             f"- To request modifications: comment `/forge address`\n"
                             f"- To accept and merge: comment `/forge accept` (I will validate via `mlg check`, resolve any compiler issues, wait for CI checks, and merge into `main`)"
                         ),

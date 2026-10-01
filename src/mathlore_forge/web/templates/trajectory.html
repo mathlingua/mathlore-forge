@@ -43,6 +43,12 @@
 
         <!-- Controls -->
         <div class="flex items-center gap-3">
+            {% if run.pr_number %}
+            <a href="/previews/{{ run.pr_number }}/" target="_blank" class="px-4 py-2 rounded-xl bg-indigo-600/90 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition">
+                <i class="fa-solid fa-book-open"></i>
+                <span>Rendered Preview</span>
+            </a>
+            {% endif %}
             {% if run.status.value == "RUNNING" %}
             <button onclick="cancelCurrentRun()" class="px-4 py-2 rounded-xl bg-rose-600/90 hover:bg-rose-500 text-white text-xs font-semibold flex items-center gap-2 shadow-lg shadow-rose-600/20 transition">
                 <i class="fa-solid fa-stop"></i>

@@ -25,8 +25,10 @@ from mathlore_forge.storage.db import (
     TrajectoryRecord,
 )
 from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
+from mathlore_forge.preview.preview_manager import build_pr_preview, get_preview_url, upload_preview_to_gcs
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubReviewComment
+from mathlore_forge.workflows.sanitizer import sanitize_author_summary
 
 
 class ReviewFlow:
@@ -181,8 +183,9 @@ class ReviewFlow:
                     run_record.thoughts_tokens = getattr(usage, "thoughts_token_count", 0)
                     run_record.total_tokens = getattr(usage, "total_token_count", 0)
 
-            run_record.summary = response_text
-            trajectory.final_output = response_text
+            clean_summary = sanitize_author_summary(response_text)
+            run_record.summary = clean_summary
+            trajectory.final_output = clean_summary
 
             # 8. Collect git diff
             diff_patch = workspace.get_diff()
@@ -201,9 +204,18 @@ class ReviewFlow:
             except Exception:
                 pass
 
+            # Re-build and upload updated preview
+            preview_url = ""
+            try:
+                docs_dir = build_pr_preview(workspace.workspace_dir, pr_number)
+                await upload_preview_to_gcs(docs_dir, pr_number)
+                preview_url = get_preview_url(pr_number)
+            except Exception as preview_err:
+                logger.warning("Failed updating preview for PR #%s: %s", pr_number, preview_err)
+
             # 10. Reply to each review comment on GitHub
             for c in unaddressed_comments:
-                reply_body = f"Addressed by Mathlore Forge agent: {response_text[:300]}..."
+                reply_body = f"Addressed by Mathlore Forge agent: {clean_summary[:300]}..."
                 try:
                     await self.github_client.reply_to_review_comment(
                         repo=repo,
@@ -224,12 +236,15 @@ class ReviewFlow:
                     db_comment.addressed = True
                     db_comment.reply_body = reply_body
 
+            preview_msg = f"\n📖 **Rendered Preview Updated**: [View Rendered Documentation]({preview_url})\n" if preview_url else ""
+
             # 11. Post summary comment on PR and re-request review
             summary_comment = (
                 f"### Review Comments Addressed\n\n"
                 f"I have addressed the feedback from Dominic Kramer:\n\n"
-                f"{response_text}\n\n"
-                f"Compiler verification (`mlg check`) passed with 0 diagnostics.\n\n"
+                f"{clean_summary}\n\n"
+                f"Compiler verification (`mlg check`) passed with 0 diagnostics.\n"
+                f"{preview_msg}\n"
                 f"---\n"
                 f"Ready for your review! Reply or approve when ready."
             )

@@ -1,4 +1,18 @@
 # syntax=docker/dockerfile:1
+
+# Stage 1: Build the mlg compiler binary from the official Mathlingua repository
+FROM rust:1.85-slim-bookworm AS mlg-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 https://github.com/mathlingua/mathlingua.git /mathlingua-src
+WORKDIR /mathlingua-src
+RUN cargo build --release && cp target/release/mlg /usr/local/bin/mlg
+
+# Stage 2: Runtime image
 FROM python:3.12-slim-bookworm AS base
 
 # Install OS dependencies, git, and build tools
@@ -11,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install uv for fast, deterministic dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:0.5.15 /uv /bin/uv
+
+# Copy pre-compiled mlg compiler binary from builder stage
+COPY --from=mlg-builder /usr/local/bin/mlg /usr/local/bin/mlg
 
 WORKDIR /app
 

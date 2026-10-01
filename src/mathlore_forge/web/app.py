@@ -13,6 +13,7 @@ from mathlore_forge.config import ensure_env_loaded
 from mathlore_forge.storage.db import init_db
 from mathlore_forge.web.routes.api import router as api_router
 from mathlore_forge.web.routes.dashboard import router as dashboard_router
+from mathlore_forge.web.routes.previews import router as previews_router
 from mathlore_forge.web.routes.webhooks import router as webhooks_router
 
 ensure_env_loaded()
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(webhooks_router)
     app.include_router(api_router)
+    app.include_router(previews_router)
 
     return app
 
