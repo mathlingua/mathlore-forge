@@ -102,7 +102,11 @@ class AuthoringFlow:
         db_session.commit()
 
         trajectory = Trajectory(metadata={"run_id": run_id, "issue_number": issue_number, "repo": repo})
-        telemetry_hooks = TrajectoryTelemetryHooks(trajectory=trajectory)
+        from mathlore_forge.web.routes.api import broadcast_run_event
+        telemetry_hooks = TrajectoryTelemetryHooks(
+            trajectory=trajectory,
+            event_callback=lambda evt: broadcast_run_event(run_id, evt),
+        )
 
         # 4. Setup isolated git workspace
         temp_dir = Path(tempfile.mkdtemp(prefix=f"forge_run_{run_id}_"))

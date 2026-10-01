@@ -107,6 +107,12 @@ def get_run(
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
     traj = db.query(TrajectoryRecord).filter_by(run_id=run_id).first()
+    duration_secs = run.duration_seconds
+    if run.status == RunStatus.RUNNING and run.started_at:
+        now = datetime.now(timezone.utc)
+        st = run.started_at if run.started_at.tzinfo else run.started_at.replace(tzinfo=timezone.utc)
+        duration_secs = max(0.0, (now - st).total_seconds())
+
     return {
         "id": run.id,
         "run_type": run.run_type.value,
@@ -125,7 +131,7 @@ def get_run(
             "thoughts": run.thoughts_tokens,
             "total": run.total_tokens,
         },
-        "duration_seconds": round(run.duration_seconds, 2),
+        "duration_seconds": round(duration_secs, 2),
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "completed_at": run.completed_at.isoformat() if run.completed_at else None,
         "has_trajectory": traj is not None,

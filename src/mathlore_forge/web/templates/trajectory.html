@@ -61,19 +61,19 @@
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-xs">
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
             <div class="text-slate-500 text-[11px] mb-1">DURATION</div>
-            <div class="text-lg font-bold text-slate-200">{{ "%.1f"|format(run.duration_seconds) }}s</div>
+            <div id="stat-duration" class="text-lg font-bold text-slate-200">{{ "%.1f"|format(run.duration_seconds) }}s</div>
         </div>
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
             <div class="text-slate-500 text-[11px] mb-1">THOUGHTS TOKENS</div>
-            <div class="text-lg font-bold text-purple-400">{{ "{:,}".format(run.thoughts_tokens) }}</div>
+            <div id="stat-thoughts" class="text-lg font-bold text-purple-400">{{ "{:,}".format(run.thoughts_tokens) }}</div>
         </div>
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
             <div class="text-slate-500 text-[11px] mb-1">CANDIDATE TOKENS</div>
-            <div class="text-lg font-bold text-indigo-400">{{ "{:,}".format(run.candidates_tokens) }}</div>
+            <div id="stat-candidates" class="text-lg font-bold text-indigo-400">{{ "{:,}".format(run.candidates_tokens) }}</div>
         </div>
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
             <div class="text-slate-500 text-[11px] mb-1">TOTAL TOKENS</div>
-            <div class="text-lg font-bold text-slate-200">{{ "{:,}".format(run.total_tokens) }}</div>
+            <div id="stat-tokens" class="text-lg font-bold text-slate-200">{{ "{:,}".format(run.total_tokens) }}</div>
         </div>
     </div>
 
@@ -280,22 +280,54 @@ async function restartCurrentRun() {
 {% if run.status.value == "RUNNING" %}
 const eventSource = new EventSource('/api/runs/{{ run.id }}/stream');
 eventSource.addEventListener('update', (e) => {
-    const data = JSON.parse(e.data);
-    const container = document.getElementById('live-stream-container');
-    if (container) {
-        const item = document.createElement('div');
-        item.className = 'bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300';
-        item.innerHTML = `<div class="text-[10px] text-indigo-400 uppercase font-bold tracking-wider mb-1">${data.event}</div><pre class="text-xs text-slate-300 overflow-x-auto whitespace-pre-wrap">${JSON.stringify(data, null, 2)}</pre>`;
-        container.appendChild(item);
-    }
+    try {
+        const data = JSON.parse(e.data);
+        const container = document.getElementById('live-stream-container');
+        if (container) {
+            const item = document.createElement('div');
+            item.className = 'bg-slate-950/70 border border-slate-800/80 rounded-xl p-4 text-slate-300';
+            let title = data.event || 'Update';
+            let body = '';
+            if (data.event === 'tool_start') {
+                title = `🔧 Dispatched Tool: <span class="text-indigo-300 font-mono">${data.tool}</span>`;
+                if (data.args && Object.keys(data.args).length > 0) {
+                    body = `<pre class="mt-2 text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap">${JSON.stringify(data.args, null, 2)}</pre>`;
+                }
+            } else if (data.event === 'tool_end') {
+                const dur = data.duration_ms ? ` (${data.duration_ms.toFixed(0)}ms)` : '';
+                title = `✅ Completed Tool: <span class="text-emerald-400 font-mono">${data.tool}</span>${dur}`;
+            } else if (data.event === 'turn_start') {
+                title = `🧠 Model Reasoning & Plan Formulated`;
+            } else if (data.event === 'turn_end') {
+                title = `💬 Turn Step Finalized`;
+            } else {
+                body = `<pre class="mt-2 text-xs text-slate-400 overflow-x-auto whitespace-pre-wrap">${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            item.innerHTML = `<div class="text-xs font-semibold">${title}</div>${body}`;
+            container.appendChild(item);
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    } catch (err) {}
 });
 
-// Auto-poll run status every 2.5 seconds until finished
+// Auto-poll run status and metrics every 2.5 seconds until finished
 const pollInterval = setInterval(async () => {
     try {
         const resp = await fetch('/api/runs/{{ run.id }}');
         if (resp.ok) {
             const data = await resp.json();
+            if (data.duration_seconds !== undefined) {
+                const el = document.getElementById('stat-duration');
+                if (el) el.innerText = `${data.duration_seconds.toFixed(1)}s`;
+            }
+            if (data.tokens) {
+                const tt = document.getElementById('stat-tokens');
+                if (tt && data.tokens.total) tt.innerText = data.tokens.total.toLocaleString();
+                const th = document.getElementById('stat-thoughts');
+                if (th && data.tokens.thoughts) th.innerText = data.tokens.thoughts.toLocaleString();
+                const tc = document.getElementById('stat-candidates');
+                if (tc && data.tokens.candidates) tc.innerText = data.tokens.candidates.toLocaleString();
+            }
             if (data.status !== 'RUNNING') {
                 clearInterval(pollInterval);
                 location.reload();

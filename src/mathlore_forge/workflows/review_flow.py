@@ -119,7 +119,11 @@ class ReviewFlow:
         db_session.commit()
 
         trajectory = Trajectory(metadata={"run_id": run_id, "pr_number": pr_number, "repo": repo})
-        telemetry_hooks = TrajectoryTelemetryHooks(trajectory=trajectory)
+        from mathlore_forge.web.routes.api import broadcast_run_event
+        telemetry_hooks = TrajectoryTelemetryHooks(
+            trajectory=trajectory,
+            event_callback=lambda evt: broadcast_run_event(run_id, evt),
+        )
 
         # 5. Setup workspace and checkout branch
         temp_dir = Path(tempfile.mkdtemp(prefix=f"forge_review_{run_id}_"))
