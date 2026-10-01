@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -13,6 +14,8 @@ import uuid
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from mathlore_forge.agents.curator_agent import CuratorAgent
 from mathlore_forge.agents.hooks import TrajectoryTelemetryHooks

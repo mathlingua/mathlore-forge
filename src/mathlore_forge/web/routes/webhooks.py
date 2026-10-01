@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from mathlore_forge.config import ensure_env_loaded
-from mathlore_forge.storage.db import IssueRecord, get_db, init_db
+from mathlore_forge.storage.db import AgentRunRecord, IssueRecord, RunStatus, RunType, get_db, init_db
+from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.workflows.authoring_flow import AuthoringFlow
 from mathlore_forge.workflows.curation_flow import CurationFlow
 from mathlore_forge.workflows.flywheel_flow import FlywheelFlow
@@ -378,6 +379,27 @@ async def _run_authoring_task(
         except Exception as e:
             logger.error("Authoring flow failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
             try:
+                rec = session.query(AgentRunRecord).filter_by(id=run_id).first()
+                if not rec:
+                    rec = AgentRunRecord(
+                        id=run_id,
+                        run_type=RunType.AUTHORING,
+                        status=RunStatus.FAILED,
+                        repo=repo,
+                        issue_number=issue_number,
+                        prompt=f"Direct authoring for #{issue_number}",
+                        error_message=str(e),
+                    )
+                    session.add(rec)
+                else:
+                    rec.status = RunStatus.FAILED
+                    rec.error_message = str(e)
+                session.commit()
+                sync_db_to_gcs_now()
+            except Exception as dberr:
+                logger.warning("Could not persist failed run record %s: %s", run_id, dberr)
+
+            try:
                 err_msg = (
                     f"### ⚠️ Mathlore Forge Agent Encountered an Error\n\n"
                     f"An error occurred during authoring:\n"
@@ -447,6 +469,27 @@ async def _run_curation_planning_task(
         except Exception as e:
             logger.error("Curation planning failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
             try:
+                rec = session.query(AgentRunRecord).filter_by(id=run_id).first()
+                if not rec:
+                    rec = AgentRunRecord(
+                        id=run_id,
+                        run_type=RunType.PLANNING,
+                        status=RunStatus.FAILED,
+                        repo=repo,
+                        issue_number=issue_number,
+                        prompt=f"Curation planning for #{issue_number}",
+                        error_message=str(e),
+                    )
+                    session.add(rec)
+                else:
+                    rec.status = RunStatus.FAILED
+                    rec.error_message = str(e)
+                session.commit()
+                sync_db_to_gcs_now()
+            except Exception as dberr:
+                logger.warning("Could not persist failed run record %s: %s", run_id, dberr)
+
+            try:
                 err_msg = (
                     f"### ⚠️ Mathlore Forge Agent Encountered an Error\n\n"
                     f"An error occurred while drafting the curation plan:\n"
@@ -496,6 +539,27 @@ async def _run_curation_refinement_task(
         except Exception as e:
             logger.error("Curation refinement failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
             try:
+                rec = session.query(AgentRunRecord).filter_by(id=run_id).first()
+                if not rec:
+                    rec = AgentRunRecord(
+                        id=run_id,
+                        run_type=RunType.REFINEMENT,
+                        status=RunStatus.FAILED,
+                        repo=repo,
+                        issue_number=issue_number,
+                        prompt=f"Proposal refinement for #{issue_number}",
+                        error_message=str(e),
+                    )
+                    session.add(rec)
+                else:
+                    rec.status = RunStatus.FAILED
+                    rec.error_message = str(e)
+                session.commit()
+                sync_db_to_gcs_now()
+            except Exception as dberr:
+                logger.warning("Could not persist failed run record %s: %s", run_id, dberr)
+
+            try:
                 err_msg = (
                     f"### ⚠️ Refinement Error\n\n"
                     f"An error occurred while refining the plan:\n"
@@ -530,6 +594,27 @@ async def _run_curation_execution_task(
             )
         except Exception as e:
             logger.error("Plan execution failed for %s#%s: %s", repo, issue_number, e, exc_info=True)
+            try:
+                rec = session.query(AgentRunRecord).filter_by(id=run_id).first()
+                if not rec:
+                    rec = AgentRunRecord(
+                        id=run_id,
+                        run_type=RunType.PLAN_EXECUTION,
+                        status=RunStatus.FAILED,
+                        repo=repo,
+                        issue_number=issue_number,
+                        prompt=f"Execute approved plan for #{issue_number}",
+                        error_message=str(e),
+                    )
+                    session.add(rec)
+                else:
+                    rec.status = RunStatus.FAILED
+                    rec.error_message = str(e)
+                session.commit()
+                sync_db_to_gcs_now()
+            except Exception as dberr:
+                logger.warning("Could not persist failed run record %s: %s", run_id, dberr)
+
             try:
                 err_msg = (
                     f"### ⚠️ Plan Execution Error\n\n"
