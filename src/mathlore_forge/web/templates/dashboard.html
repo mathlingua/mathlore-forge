@@ -35,11 +35,17 @@
 
         <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
             <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
-                <span>Total Tokens Used</span>
-                <i class="fa-solid fa-brain text-purple-400"></i>
+                <span>Total Tokens & Cost</span>
+                <a href="/analytics" class="text-emerald-400 hover:text-emerald-300 text-[11px] font-mono lowercase flex items-center gap-1" title="View Detailed Analytics">
+                    <span>{{ stats.total_cost }}</span>
+                    <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                </a>
             </div>
             <div class="text-3xl font-bold text-white">{{ "{:,}".format(stats.total_tokens) }}</div>
-            <div class="text-xs text-slate-500 mt-1">Gemini 3.8 reasoning & authoring</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>{{ stats.total_cost }} spend</span>
+                <a href="/analytics" class="text-indigo-400 hover:underline text-[11px]">Cost Analytics &rarr;</a>
+            </div>
         </div>
     </div>
 
@@ -198,9 +204,15 @@
                             </span>
                             {% endif %}
                         </td>
-                        <td class="py-3.5 px-4 text-xs">
-                            <div class="text-slate-200 font-mono">{{ "{:,}".format(run.total_tokens) }} tokens</div>
-                            <div class="text-slate-500">{{ "%.1f"|format(run.duration_seconds) }}s</div>
+                        <td class="py-3.5 px-4 text-xs font-mono">
+                            <div class="text-slate-200">{{ "{:,}".format(run.total_tokens) }} tokens</div>
+                            <div class="flex items-center gap-1.5 text-slate-400 mt-0.5">
+                                <span>{{ "%.1f"|format(run.duration_seconds) }}s</span>
+                                {% if run.cost_info %}
+                                <span class="text-slate-600">&bull;</span>
+                                <span class="text-emerald-400 font-semibold">{{ run.cost_info.formatted_total_cost }}</span>
+                                {% endif %}
+                            </div>
                         </td>
                         <td class="py-3.5 px-4 text-xs font-mono">
                             {% if run.pr_number %}

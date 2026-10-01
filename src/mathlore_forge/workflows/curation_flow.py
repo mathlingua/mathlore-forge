@@ -130,6 +130,7 @@ class CurationFlow:
             repo=repo,
             issue_id=issue_record.id,
             issue_number=issue_number,
+            model_name=self.config.models.planner,
             prompt=f"Draft architectural proposal for issue #{issue_number}: {issue_title}\n\n{issue_body}",
         )
         db_session.add(run_record)
@@ -185,6 +186,15 @@ class CurationFlow:
                 issue_title=issue_title,
                 revision=1,
             )
+
+            if hasattr(curator, "last_usage") and curator.last_usage:
+                usage = curator.last_usage
+                run_record.prompt_tokens = getattr(usage, "prompt_token_count", 0)
+                run_record.candidates_tokens = getattr(usage, "candidates_token_count", 0)
+                run_record.thoughts_tokens = getattr(usage, "thoughts_token_count", 0)
+                run_record.total_tokens = getattr(usage, "total_token_count", 0)
+            if hasattr(curator, "last_conversation_id") and curator.last_conversation_id:
+                run_record.conversation_id = curator.last_conversation_id
 
             run_record.status = RunStatus.COMPLETED
             run_record.summary = proposal
@@ -258,6 +268,7 @@ class CurationFlow:
             repo=repo,
             issue_id=issue_record.id,
             issue_number=issue_number,
+            model_name=self.config.models.planner,
             prompt=f"Refine proposal (Revision {new_revision}) for issue #{issue_number} based on feedback:\n{user_feedback}",
         )
         db_session.add(run_record)
@@ -311,6 +322,15 @@ class CurationFlow:
                 issue_title=issue_record.title,
                 revision=new_revision,
             )
+
+            if hasattr(curator, "last_usage") and curator.last_usage:
+                usage = curator.last_usage
+                run_record.prompt_tokens = getattr(usage, "prompt_token_count", 0)
+                run_record.candidates_tokens = getattr(usage, "candidates_token_count", 0)
+                run_record.thoughts_tokens = getattr(usage, "thoughts_token_count", 0)
+                run_record.total_tokens = getattr(usage, "total_token_count", 0)
+            if hasattr(curator, "last_conversation_id") and curator.last_conversation_id:
+                run_record.conversation_id = curator.last_conversation_id
 
             run_record.status = RunStatus.COMPLETED
             run_record.summary = refined
@@ -406,6 +426,7 @@ class CurationFlow:
             issue_id=issue_record.id,
             issue_number=issue_number,
             branch_name=branch_name,
+            model_name=self.config.models.author,
             prompt=f"Execute approved plan for #{issue_number}: {issue_record.title}\n\n{issue_record.plan_markdown}",
         )
         db_session.add(run_record)
@@ -494,7 +515,7 @@ class CurationFlow:
                 f"#### Summary of Changes\n"
                 f"{clean_summary}\n\n"
                 f"---\n"
-                f"*Authored by Mathlore Forge Curator & Mathlingua Engine.*"
+                f"*Authored by Mathlore Forge.*"
             )
 
             try:

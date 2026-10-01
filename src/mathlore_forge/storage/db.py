@@ -119,6 +119,7 @@ class AgentRunRecord(Base):
     pr_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     branch_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     conversation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True, default="gemini-3.8-flash")
 
     prompt: Mapped[str] = mapped_column(Text, default="")
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -205,6 +206,15 @@ class Database:
                             conn.execute(text("ALTER TABLE forge_issues ADD COLUMN plan_status VARCHAR(50)"))
                         if "plan_revision" not in cols:
                             conn.execute(text("ALTER TABLE forge_issues ADD COLUMN plan_revision INTEGER DEFAULT 0"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+                try:
+                    res_runs = conn.execute(text("PRAGMA table_info(agent_runs)")).fetchall()
+                    run_cols = {row[1] for row in res_runs}
+                    if run_cols and "model_name" not in run_cols:
+                        conn.execute(text("ALTER TABLE agent_runs ADD COLUMN model_name VARCHAR(128) DEFAULT 'gemini-3.8-flash'"))
                     conn.commit()
                 except Exception:
                     pass

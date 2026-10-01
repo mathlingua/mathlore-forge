@@ -179,6 +179,8 @@ class CuratorAgent:
         self.model = model or self.config.models.planner
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         self.toolkit = CuratorToolkit(content_root=self.content_root, mlg_bin=self.config.resolve_mlg_bin())
+        self.last_usage: Any = None
+        self.last_conversation_id: str | None = None
 
     def _build_agent(self, conversation_history: list[Any] | None = None) -> Agent:
         skills_paths = _resolve_skills_paths(self.config.resolve_skills_dir())
@@ -220,6 +222,9 @@ class CuratorAgent:
         agent = self._build_agent()
         async with agent:
             resp = await agent.chat(prompt)
+            self.last_conversation_id = getattr(agent, "conversation_id", None)
+            if hasattr(agent, "conversation") and hasattr(agent.conversation, "total_usage"):
+                self.last_usage = agent.conversation.total_usage
             return await resp.text()
 
     async def refine_proposal(
@@ -243,4 +248,7 @@ class CuratorAgent:
         agent = self._build_agent()
         async with agent:
             resp = await agent.chat(prompt)
+            self.last_conversation_id = getattr(agent, "conversation_id", None)
+            if hasattr(agent, "conversation") and hasattr(agent.conversation, "total_usage"):
+                self.last_usage = agent.conversation.total_usage
             return await resp.text()

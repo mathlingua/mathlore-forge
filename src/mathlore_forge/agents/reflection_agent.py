@@ -52,6 +52,8 @@ class ReflectionAgent:
 
     def __init__(self, config: MathloreConfig | None = None):
         self.config = config or load_config()
+        self.last_usage: Any = None
+        self.last_conversation_id: str | None = None
 
     def create_agent(self) -> Agent:
         capabilities = CapabilitiesConfig(
@@ -79,6 +81,9 @@ class ReflectionAgent:
         async with agent:
             response = await agent.chat(prompt)
             raw_text = await response.text()
+            self.last_conversation_id = getattr(agent, "conversation_id", None)
+            if hasattr(agent, "conversation") and hasattr(agent.conversation, "total_usage"):
+                self.last_usage = agent.conversation.total_usage
 
         # Parse JSON from response
         try:

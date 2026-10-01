@@ -1,0 +1,645 @@
+{% extends "base.html" %}
+
+{% block title %}Issue Cost & Duration Analytics - Mathlore Forge{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <div class="space-y-1">
+            <div class="flex items-center gap-3">
+                <a href="/" class="text-slate-400 hover:text-white text-sm">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Agent Runs
+                </a>
+                <span class="text-slate-600">/</span>
+                <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">Observability & Economics</span>
+            </div>
+            <h1 class="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+                <i class="fa-solid fa-chart-pie text-indigo-400"></i>
+                <span>Issue Cost & Duration Analytics</span>
+            </h1>
+            <p class="text-sm text-slate-400">
+                Detailed dollar cost calculations, token consumption, and agent runtimes across each curated GitHub issue and phase.
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="expandAllIssues()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition" title="Expand All Issues">
+                <i class="fa-solid fa-angles-down mr-1"></i> Expand All
+            </button>
+            <button onclick="collapseAllIssues()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition" title="Collapse All Issues">
+                <i class="fa-solid fa-angles-up mr-1"></i> Collapse All
+            </button>
+            <button onclick="location.reload()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition" title="Refresh Analytics">
+                <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Top KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Cost Card -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Total Estimated Cost</span>
+                <i class="fa-solid fa-receipt text-emerald-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-emerald-400 font-mono">{{ analytics.formatted_global_total_cost }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>Avg per issue: <strong class="text-slate-200">{{ analytics.formatted_average_cost_per_issue }}</strong></span>
+                <span class="text-[10px] text-slate-500">USD</span>
+            </div>
+        </div>
+
+        <!-- Total Agent Runtime Card -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Total Agent Runtime</span>
+                <i class="fa-regular fa-clock text-indigo-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-indigo-300 font-mono">{{ analytics.formatted_global_total_duration }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>Avg per issue: <strong class="text-slate-200">{{ analytics.formatted_average_duration_per_issue }}</strong></span>
+                <span class="text-[10px] text-slate-500">{{ "%.1f"|format(analytics.global_total_duration) }}s total</span>
+            </div>
+        </div>
+
+        <!-- Total Tokens Processed Card -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Total Tokens Used</span>
+                <i class="fa-solid fa-brain text-purple-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white font-mono">{{ "{:,}".format(analytics.global_total_tokens) }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>Prompt: <strong class="text-slate-300">{{ "{:,}".format(analytics.global_input_tokens) }}</strong></span>
+                <span>Output: <strong class="text-slate-300">{{ "{:,}".format(analytics.global_output_tokens) }}</strong></span>
+            </div>
+        </div>
+
+        <!-- Issues Tracked Card -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 shadow-sm">
+            <div class="flex items-center justify-between text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                <span>Issues Processed</span>
+                <i class="fa-solid fa-hashtag text-amber-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-amber-300 font-mono">{{ analytics.total_issues_count }}</div>
+            <div class="text-xs text-slate-400 mt-1 flex items-center justify-between">
+                <span>All phases tracked</span>
+                {% if analytics.unassociated_runs %}
+                <span class="text-slate-500">{{ analytics.unassociated_runs|length }} ad-hoc runs</span>
+                {% else %}
+                <span class="text-slate-500">100% matched</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase & Model Breakdown Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Workflow Phase Distribution -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-layer-group text-indigo-400"></i>
+                    <span>Expenditure by Workflow Phase</span>
+                </h3>
+                <span class="text-xs text-slate-500">Cost & Runtime proportion</span>
+            </div>
+
+            <div class="space-y-4 pt-1">
+                {% for p_key, p_val in analytics.phase_totals.items() %}
+                <div class="space-y-1.5">
+                    <div class="flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-2 font-medium text-slate-200">
+                            {% if p_key == "planning" %}
+                            <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
+                            {% elif p_key == "authoring" %}
+                            <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+                            {% elif p_key == "review" %}
+                            <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+                            {% else %}
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                            {% endif %}
+                            <span>{{ p_val.label }}</span>
+                            <span class="text-slate-500 font-mono text-[11px]">({{ p_val.runs }} runs)</span>
+                        </div>
+                        <div class="flex items-center gap-3 font-mono text-xs">
+                            <span class="text-emerald-400 font-bold">{{ p_val.formatted_cost }}</span>
+                            <span class="text-slate-400">/</span>
+                            <span class="text-slate-300">{{ p_val.formatted_duration }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Dual Progress Bar: Cost (top) & Time (bottom) -->
+                    <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden flex border border-slate-800/80">
+                        {% if p_key == "planning" %}
+                        <div class="bg-purple-500 h-full transition-all duration-300" style="width: {{ p_val.cost_percentage }}%" title="Cost: {{ p_val.cost_percentage }}%"></div>
+                        {% elif p_key == "authoring" %}
+                        <div class="bg-indigo-500 h-full transition-all duration-300" style="width: {{ p_val.cost_percentage }}%" title="Cost: {{ p_val.cost_percentage }}%"></div>
+                        {% elif p_key == "review" %}
+                        <div class="bg-amber-500 h-full transition-all duration-300" style="width: {{ p_val.cost_percentage }}%" title="Cost: {{ p_val.cost_percentage }}%"></div>
+                        {% else %}
+                        <div class="bg-emerald-500 h-full transition-all duration-300" style="width: {{ p_val.cost_percentage }}%" title="Cost: {{ p_val.cost_percentage }}%"></div>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-500 font-mono px-0.5">
+                        <span>Cost Share: {{ p_val.cost_percentage }}%</span>
+                        <span>Time Share: {{ p_val.time_percentage }}% ({{ "{:,}".format(p_val.tokens) }} tokens)</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Model Rates & Utilization Breakdown -->
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-microchip text-indigo-400"></i>
+                    <span>Model Rates & Total Spend</span>
+                </h3>
+                <span class="text-xs text-slate-500">Billing breakdown</span>
+            </div>
+
+            <!-- Pricing Rates Summary Banner -->
+            <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 text-xs text-slate-300 grid grid-cols-2 gap-3 font-mono">
+                <div class="space-y-0.5">
+                    <div class="text-[11px] text-indigo-400 font-bold uppercase">Gemini Flash Rate</div>
+                    <div>Input: <span class="text-slate-200 font-bold">$0.10</span> / 1M tokens</div>
+                    <div>Output/Think: <span class="text-slate-200 font-bold">$0.40</span> / 1M tokens</div>
+                </div>
+                <div class="space-y-0.5">
+                    <div class="text-[11px] text-purple-400 font-bold uppercase">Gemini Pro Rate</div>
+                    <div>Input: <span class="text-slate-200 font-bold">$1.25</span> / 1M tokens</div>
+                    <div>Output/Think: <span class="text-slate-200 font-bold">$5.00</span> / 1M tokens</div>
+                </div>
+            </div>
+
+            <!-- Models Listing -->
+            <div class="space-y-3 pt-1">
+                {% for m_name, m_val in analytics.model_totals.items() %}
+                <div class="bg-slate-950/40 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between">
+                    <div class="space-y-1">
+                        <div class="text-xs font-bold text-slate-200 flex items-center gap-2">
+                            <i class="fa-solid fa-brain text-indigo-400"></i>
+                            <span>{{ m_name }}</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">{{ m_val.runs }} runs</span>
+                        </div>
+                        <div class="text-xs text-slate-500 font-mono">
+                            Runtime: {{ m_val.formatted_duration }} &bull; {{ "{:,}".format(m_val.tokens) }} tokens
+                        </div>
+                    </div>
+                    <div class="text-right font-mono">
+                        <div class="text-sm font-bold text-emerald-400">{{ m_val.formatted_cost }}</div>
+                        <div class="text-[11px] text-slate-500">cumulative spend</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-500 text-center py-4">No model telemetry recorded yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Search, Filter & Sort Toolbar for Issues -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-3 shadow-md">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex items-center gap-3 flex-1">
+                <!-- Search Input -->
+                <div class="relative w-full max-w-md">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                    <input type="text" id="issue-search" oninput="handleIssueSearch(event)" placeholder="Search issues by #, title, repo, or author..." class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+                </div>
+
+                <!-- Status Filter -->
+                <select id="issue-status-filter" onchange="handleIssueFilter(event)" class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <option value="ALL">All Statuses</option>
+                    <option value="OPEN">Open Issues</option>
+                    <option value="CLOSED">Closed Issues</option>
+                    <option value="PLAN_APPROVED">Plan Approved</option>
+                    <option value="PLAN_PROPOSED">Plan Proposed</option>
+                </select>
+            </div>
+
+            <!-- Sort By Dropdown -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-400 whitespace-nowrap">Sort by:</span>
+                <select id="issue-sort-by" onchange="handleIssueSort(event)" class="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                    <option value="cost_desc">Cost (Highest First)</option>
+                    <option value="cost_asc">Cost (Lowest First)</option>
+                    <option value="time_desc">Duration (Longest First)</option>
+                    <option value="time_asc">Duration (Shortest First)</option>
+                    <option value="issue_desc">Issue # (Newest First)</option>
+                    <option value="issue_asc">Issue # (Oldest First)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-800/60">
+            <span id="issue-counter">Showing all {{ analytics.issues|length }} issues</span>
+            <span class="text-slate-400">Click any issue to inspect individual run calculations</span>
+        </div>
+    </div>
+
+    <!-- Issues Analytics List -->
+    <div id="issues-container" class="space-y-4">
+        {% for issue in analytics.issues %}
+        <div id="issue-card-{{ issue.id }}"
+             data-issue-id="{{ issue.id }}"
+             data-issue-number="{{ issue.issue_number }}"
+             data-repo="{{ issue.repo }}"
+             data-title="{{ issue.title|lower }}"
+             data-author="{{ issue.author|lower }}"
+             data-status="{{ issue.status|upper }}"
+             data-plan-status="{{ issue.plan_status or '' }}"
+             data-cost="{{ issue.total_cost }}"
+             data-duration="{{ issue.total_duration_seconds }}"
+             data-tokens="{{ issue.total_tokens }}"
+             class="issue-analytics-card bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl transition-all">
+            
+            <!-- Issue Card Summary Header -->
+            <div onclick="toggleIssueDetails({{ issue.id }})" class="p-5 cursor-pointer hover:bg-slate-800/30 transition flex flex-col lg:flex-row lg:items-center justify-between gap-4 select-none">
+                <div class="space-y-1.5 flex-1 min-w-0">
+                    <div class="flex items-center flex-wrap gap-2 text-xs">
+                        <span class="font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                            #{{ issue.issue_number }}
+                        </span>
+                        <a href="https://github.com/{{ issue.repo }}/issues/{{ issue.issue_number }}" target="_blank" onclick="event.stopPropagation()" class="text-slate-400 hover:text-white flex items-center gap-1 font-mono text-[11px]" title="Open on GitHub">
+                            <span>{{ issue.repo }}</span>
+                            <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                        </a>
+
+                        <!-- Issue Status Badge -->
+                        {% if issue.status|lower == 'open' %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Open</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-300 border border-purple-500/20">Closed</span>
+                        {% endif %}
+
+                        <!-- Plan Status Badge -->
+                        {% if issue.plan_status == 'APPROVED' %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">Plan Approved</span>
+                        {% elif issue.plan_status == 'PROPOSED' %}
+                        <span class="px-2 py-0.5 rounded-full text-[10px] font-medium bg-purple-500/10 text-purple-300 border border-purple-500/20">Plan Proposed</span>
+                        {% endif %}
+
+                        <span class="text-slate-500 text-[11px]">&bull; Author: @{{ issue.author }}</span>
+                        {% if issue.created_at %}
+                        <span class="text-slate-500 text-[11px]">&bull; {{ issue.created_at }}</span>
+                        {% endif %}
+                    </div>
+
+                    <h2 class="text-base font-bold text-white truncate hover:text-indigo-300 transition">
+                        {{ issue.title }}
+                    </h2>
+
+                    <!-- Phase Micro-chips -->
+                    <div class="flex items-center flex-wrap gap-2 pt-1 text-[11px] font-mono">
+                        {% if issue.phase_breakdown.planning.runs > 0 %}
+                        <span class="text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                            Planning: {{ issue.phase_breakdown.planning.formatted_cost }} ({{ issue.phase_breakdown.planning.formatted_duration }})
+                        </span>
+                        {% endif %}
+                        {% if issue.phase_breakdown.authoring.runs > 0 %}
+                        <span class="text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                            Execution: {{ issue.phase_breakdown.authoring.formatted_cost }} ({{ issue.phase_breakdown.authoring.formatted_duration }})
+                        </span>
+                        {% endif %}
+                        {% if issue.phase_breakdown.review.runs > 0 %}
+                        <span class="text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                            Review: {{ issue.phase_breakdown.review.formatted_cost }} ({{ issue.phase_breakdown.review.formatted_duration }})
+                        </span>
+                        {% endif %}
+                        {% if issue.phase_breakdown.flywheel.runs > 0 %}
+                        <span class="text-emerald-300 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                            Flywheel: {{ issue.phase_breakdown.flywheel.formatted_cost }} ({{ issue.phase_breakdown.flywheel.formatted_duration }})
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Right Badges: Total Cost, Duration, Tokens, Expand Arrow -->
+                <div class="flex items-center gap-4 lg:self-center">
+                    <div class="text-right font-mono">
+                        <div class="text-lg font-bold text-emerald-400">{{ issue.formatted_total_cost }}</div>
+                        <div class="text-[11px] text-slate-400">{{ issue.formatted_total_duration }} &bull; {{ "{:,}".format(issue.total_tokens) }} tokens</div>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                        {{ issue.total_runs }} {% if issue.total_runs == 1 %}run{% else %}runs{% endif %}
+                    </span>
+                    <button class="w-8 h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition">
+                        <i id="issue-arrow-{{ issue.id }}" class="fa-solid fa-chevron-down transition-transform duration-200"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Itemized Run Breakdown (Collapsible Drawer) -->
+            <div id="issue-breakdown-{{ issue.id }}" class="hidden border-t border-slate-800 bg-slate-950/70 p-5 space-y-4">
+                <div class="flex items-center justify-between text-xs text-slate-400 font-medium pb-1">
+                    <span class="uppercase tracking-wider font-semibold text-slate-300 flex items-center gap-1.5">
+                        <i class="fa-solid fa-list-check text-indigo-400"></i>
+                        <span>Itemized Agent Runs & Formula Breakdown</span>
+                    </span>
+                    <span class="font-mono text-[11px]">Rates: Flash ($0.10 / $0.40) &bull; Pro ($1.25 / $5.00)</span>
+                </div>
+
+                {% if issue.runs %}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs font-mono text-slate-300">
+                        <thead class="bg-slate-900/90 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                            <tr>
+                                <th class="py-2.5 px-3">Phase / Run ID</th>
+                                <th class="py-2.5 px-3">Model</th>
+                                <th class="py-2.5 px-3">Duration</th>
+                                <th class="py-2.5 px-3">Tokens (In / Out / Think)</th>
+                                <th class="py-2.5 px-3">Cost Formula Breakdown</th>
+                                <th class="py-2.5 px-3 text-right">Subtotal</th>
+                                <th class="py-2.5 px-3 text-right">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/50 font-normal">
+                            {% for r in issue.runs %}
+                            <tr class="hover:bg-slate-900/50 transition">
+                                <td class="py-2.5 px-3">
+                                    <div class="font-bold text-slate-200">
+                                        {% if r.phase_category == 'planning' %}
+                                        <span class="text-purple-400"><i class="fa-solid fa-lightbulb mr-1"></i>Planning</span>
+                                        {% elif r.phase_category == 'authoring' %}
+                                        <span class="text-indigo-400"><i class="fa-solid fa-terminal mr-1"></i>Execution</span>
+                                        {% elif r.phase_category == 'review' %}
+                                        <span class="text-amber-400"><i class="fa-solid fa-comments mr-1"></i>Review</span>
+                                        {% else %}
+                                        <span class="text-emerald-400"><i class="fa-solid fa-repeat mr-1"></i>Flywheel</span>
+                                        {% endif %}
+                                    </div>
+                                    <a href="/runs/{{ r.id }}" class="text-[11px] text-indigo-400 hover:underline">
+                                        {{ r.id }}
+                                    </a>
+                                </td>
+                                <td class="py-2.5 px-3">
+                                    <span class="text-slate-200 font-semibold">{{ r.model_name }}</span>
+                                    <div class="text-[10px] text-slate-500 font-sans">{{ r.status }}</div>
+                                </td>
+                                <td class="py-2.5 px-3">
+                                    <span class="text-slate-200 font-semibold">{{ r.formatted_duration }}</span>
+                                    <div class="text-[10px] text-slate-500">{{ r.started_at }}</div>
+                                </td>
+                                <td class="py-2.5 px-3">
+                                    <div class="text-slate-200 font-semibold">{{ "{:,}".format(r.cost.total_tokens) }} tokens</div>
+                                    <div class="text-[10px] text-slate-400">
+                                        {{ "{:,}".format(r.cost.input_tokens) }} in &bull; {{ "{:,}".format(r.cost.output_tokens) }} out
+                                        {% if r.cost.thoughts_tokens > 0 %}
+                                        &bull; {{ "{:,}".format(r.cost.thoughts_tokens) }} thk
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="py-2.5 px-3">
+                                    <div class="text-[11px] text-slate-300">
+                                        <span class="text-indigo-300">{{ r.cost.formatted_input_cost }}</span>
+                                        <span class="text-slate-500">+</span>
+                                        <span class="text-purple-300">{{ r.cost.formatted_output_cost }}</span>
+                                    </div>
+                                    <div class="text-[10px] text-slate-500">
+                                        In: ${{ r.cost.input_rate_per_m }}/M &bull; Out: ${{ r.cost.output_rate_per_m }}/M
+                                    </div>
+                                </td>
+                                <td class="py-2.5 px-3 text-right">
+                                    <span class="text-sm font-bold text-emerald-400">{{ r.cost.formatted_total_cost }}</span>
+                                </td>
+                                <td class="py-2.5 px-3 text-right">
+                                    <div class="flex items-center justify-end gap-1.5">
+                                        {% if r.pr_number %}
+                                        <a href="https://github.com/{{ issue.repo }}/pull/{{ r.pr_number }}" target="_blank" class="px-2 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-[11px] transition" title="PR #{{ r.pr_number }}">
+                                            PR #{{ r.pr_number }}
+                                        </a>
+                                        {% endif %}
+                                        <a href="/runs/{{ r.id }}" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] transition" title="Inspect Trajectory">
+                                            Trajectory
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="border-t border-slate-800 bg-slate-900/60 font-bold text-slate-200">
+                            <tr>
+                                <td colspan="5" class="py-2 px-3 text-right uppercase tracking-wider text-[11px]">Issue Total:</td>
+                                <td class="py-2 px-3 text-right text-emerald-400 text-sm font-mono">{{ issue.formatted_total_cost }}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-xs text-slate-500 py-3 text-center">
+                    No runs recorded for this issue yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 text-xs">
+            <i class="fa-solid fa-circle-info text-2xl text-slate-600 mb-3 block"></i>
+            <span>No curated issues found in the database. As issues are processed, their complete financial and runtime metrics will appear here.</span>
+        </div>
+        {% endfor %}
+
+        <!-- Empty Filter Results Card -->
+        <div id="no-matching-issues" class="hidden bg-slate-900/80 border border-slate-800 rounded-2xl p-12 text-center text-slate-500 text-xs">
+            <i class="fa-solid fa-filter text-2xl text-slate-600 mb-3 block"></i>
+            <span>No issues match your search or filter criteria.</span>
+            <button onclick="resetIssueFilters()" class="text-indigo-400 hover:underline ml-2">Reset Filters</button>
+        </div>
+    </div>
+
+    <!-- Standalone & Unassociated Runs (if any) -->
+    {% if analytics.unassociated_runs %}
+    <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div>
+                <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                    <i class="fa-solid fa-code-branch text-indigo-400"></i>
+                    <span>Standalone / Ad-Hoc Agent Runs</span>
+                </h3>
+                <p class="text-xs text-slate-500 mt-0.5">Runs executed outside of a tracked GitHub issue (e.g. ad-hoc authoring, background golden flywheel tests)</p>
+            </div>
+            <div class="text-right font-mono">
+                <span class="text-emerald-400 font-bold text-sm">{{ analytics.formatted_unassociated_cost }}</span>
+                <span class="text-slate-500 text-xs block">{{ analytics.unassociated_runs|length }} runs</span>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono text-slate-300">
+                <thead class="bg-slate-900/90 border-b border-slate-800 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <tr>
+                        <th class="py-2.5 px-3">Run ID / Type</th>
+                        <th class="py-2.5 px-3">Model</th>
+                        <th class="py-2.5 px-3">Duration</th>
+                        <th class="py-2.5 px-3">Tokens</th>
+                        <th class="py-2.5 px-3">Subtotal</th>
+                        <th class="py-2.5 px-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800/50">
+                    {% for r in analytics.unassociated_runs %}
+                    <tr class="hover:bg-slate-800/30 transition">
+                        <td class="py-2.5 px-3">
+                            <a href="/runs/{{ r.id }}" class="text-indigo-400 hover:underline font-bold">{{ r.id }}</a>
+                            <div class="text-[10px] text-slate-500">{{ r.run_type }}</div>
+                        </td>
+                        <td class="py-2.5 px-3 text-slate-200">{{ r.model_name }}</td>
+                        <td class="py-2.5 px-3 text-slate-200">{{ r.formatted_duration }}</td>
+                        <td class="py-2.5 px-3 text-slate-200">{{ "{:,}".format(r.cost.total_tokens) }}</td>
+                        <td class="py-2.5 px-3 text-emerald-400 font-bold">{{ r.cost.formatted_total_cost }}</td>
+                        <td class="py-2.5 px-3 text-right">
+                            <a href="/runs/{{ r.id }}" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px]">
+                                Trajectory
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleIssueDetails(issueId) {
+    const drawer = document.getElementById(`issue-breakdown-${issueId}`);
+    const arrow = document.getElementById(`issue-arrow-${issueId}`);
+    if (drawer) {
+        drawer.classList.toggle('hidden');
+    }
+    if (arrow) {
+        arrow.classList.toggle('rotate-180');
+    }
+}
+
+function expandAllIssues() {
+    document.querySelectorAll('[id^="issue-breakdown-"]').forEach(el => el.classList.remove('hidden'));
+    document.querySelectorAll('[id^="issue-arrow-"]').forEach(el => el.classList.add('rotate-180'));
+}
+
+function collapseAllIssues() {
+    document.querySelectorAll('[id^="issue-breakdown-"]').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[id^="issue-arrow-"]').forEach(el => el.classList.remove('rotate-180'));
+}
+
+// Client-side search, filtering and sorting
+let issueSearchQuery = '';
+let issueStatusFilter = 'ALL';
+let issueSortBy = 'cost_desc';
+
+function handleIssueSearch(e) {
+    issueSearchQuery = e.target.value.trim().toLowerCase();
+    filterAndSortIssues();
+}
+
+function handleIssueFilter(e) {
+    issueStatusFilter = e.target.value;
+    filterAndSortIssues();
+}
+
+function handleIssueSort(e) {
+    issueSortBy = e.target.value;
+    filterAndSortIssues();
+}
+
+function resetIssueFilters() {
+    issueSearchQuery = '';
+    issueStatusFilter = 'ALL';
+    issueSortBy = 'cost_desc';
+    const sInput = document.getElementById('issue-search');
+    if (sInput) sInput.value = '';
+    const fSelect = document.getElementById('issue-status-filter');
+    if (fSelect) fSelect.value = 'ALL';
+    const sortSelect = document.getElementById('issue-sort-by');
+    if (sortSelect) sortSelect.value = 'cost_desc';
+    filterAndSortIssues();
+}
+
+function filterAndSortIssues() {
+    const cards = Array.from(document.querySelectorAll('.issue-analytics-card'));
+    const container = document.getElementById('issues-container');
+    const noMatch = document.getElementById('no-matching-issues');
+    const counter = document.getElementById('issue-counter');
+    let visibleCount = 0;
+
+    // Filter
+    cards.forEach(card => {
+        const num = card.getAttribute('data-issue-number') || '';
+        const title = card.getAttribute('data-title') || '';
+        const author = card.getAttribute('data-author') || '';
+        const repo = card.getAttribute('data-repo') || '';
+        const status = card.getAttribute('data-status') || '';
+        const planStatus = card.getAttribute('data-plan-status') || '';
+
+        let matchesSearch = true;
+        if (issueSearchQuery) {
+            matchesSearch = num.includes(issueSearchQuery) ||
+                            title.includes(issueSearchQuery) ||
+                            author.includes(issueSearchQuery) ||
+                            repo.includes(issueSearchQuery);
+        }
+
+        let matchesStatus = true;
+        if (issueStatusFilter === 'OPEN') {
+            matchesStatus = (status === 'OPEN');
+        } else if (issueStatusFilter === 'CLOSED') {
+            matchesStatus = (status === 'CLOSED');
+        } else if (issueStatusFilter === 'PLAN_APPROVED') {
+            matchesStatus = (planStatus === 'APPROVED');
+        } else if (issueStatusFilter === 'PLAN_PROPOSED') {
+            matchesStatus = (planStatus === 'PROPOSED');
+        }
+
+        if (matchesSearch && matchesStatus) {
+            card.classList.remove('hidden');
+            visibleCount++;
+        } else {
+            card.classList.add('hidden');
+        }
+    });
+
+    // Sort
+    cards.sort((a, b) => {
+        const costA = parseFloat(a.getAttribute('data-cost')) || 0;
+        const costB = parseFloat(b.getAttribute('data-cost')) || 0;
+        const durA = parseFloat(a.getAttribute('data-duration')) || 0;
+        const durB = parseFloat(b.getAttribute('data-duration')) || 0;
+        const numA = parseInt(a.getAttribute('data-issue-number')) || 0;
+        const numB = parseInt(b.getAttribute('data-issue-number')) || 0;
+
+        if (issueSortBy === 'cost_desc') return costB - costA;
+        if (issueSortBy === 'cost_asc') return costA - costB;
+        if (issueSortBy === 'time_desc') return durB - durA;
+        if (issueSortBy === 'time_asc') return durA - durB;
+        if (issueSortBy === 'issue_desc') return numB - numA;
+        if (issueSortBy === 'issue_asc') return numA - numB;
+        return 0;
+    });
+
+    cards.forEach(card => container.appendChild(card));
+
+    if (noMatch) {
+        if (visibleCount === 0 && cards.length > 0) {
+            noMatch.classList.remove('hidden');
+        } else {
+            noMatch.classList.add('hidden');
+        }
+    }
+
+    if (counter) {
+        counter.innerText = `Showing ${visibleCount} of ${cards.length} issues`;
+    }
+}
+
+// Initial sorting on load
+document.addEventListener('DOMContentLoaded', () => {
+    filterAndSortIssues();
+});
+</script>
+{% endblock %}

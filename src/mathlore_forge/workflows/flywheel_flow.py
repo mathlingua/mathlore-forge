@@ -337,7 +337,7 @@ class FlywheelFlow:
                             f"`golden_tests/{learning.get('golden_test_id', '')}`\n\n"
                             f"Files modified: {', '.join(str(f.name) for f in modified_files)}\n\n"
                             f"---\n"
-                            f"*Submitted by Mathlore Forge Self-Improvement Engine.*"
+                            f"*Submitted by Mathlore Forge.*"
                         )
 
                         try:

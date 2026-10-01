@@ -24,6 +24,7 @@ from mathlore_forge.storage.db import (
     get_db,
     reconcile_stray_review_runs,
 )
+from mathlore_forge.observability.pricing import aggregate_issue_analytics
 from mathlore_forge.web.auth import require_admin_user
 from mathlore_forge.workflows.authoring_flow import AuthoringFlow
 
@@ -401,3 +402,14 @@ def get_learned_guidelines(
         "path": str(skill_file),
         "content": content,
     }
+
+
+@router.get("/analytics")
+def get_analytics(
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_admin_user),
+) -> dict[str, Any]:
+    """Returns cost and duration analytics aggregated by issue and global totals."""
+    reconcile_stray_review_runs(db)
+    return aggregate_issue_analytics(db)
+

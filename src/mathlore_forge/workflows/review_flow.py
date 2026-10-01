@@ -115,6 +115,7 @@ class ReviewFlow:
             pr_id=pr_record.id,
             pr_number=pr_number,
             branch_name=pr.head_branch,
+            model_name=self.config.models.author,
             prompt=f"Address {len(unaddressed_comments)} review comments on PR #{pr_number}",
         )
         db_session.add(run_record)

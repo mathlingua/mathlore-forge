@@ -98,6 +98,7 @@ class AuthoringFlow:
             repo=repo,
             issue_id=issue_record.id,
             issue_number=issue_number,
+            model_name=self.config.models.author,
             prompt=f"Author content for issue #{issue_number}: {issue.title}\n\n{issue.body}",
         )
         db_session.add(run_record)
@@ -198,7 +199,7 @@ class AuthoringFlow:
                 f"#### Summary of Changes\n"
                 f"{clean_summary}\n\n"
                 f"---\n"
-                f"*Authored by Mathlore Forge with Google Antigravity Agent Harness.*"
+                f"*Authored by Mathlore Forge.*"
             )
 
             try:

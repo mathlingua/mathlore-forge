@@ -77,23 +77,34 @@
         </div>
     </div>
 
-    <!-- Telemetry Cards -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 font-mono text-xs">
-        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-            <div class="text-slate-500 text-[11px] mb-1">DURATION</div>
-            <div id="stat-duration" class="text-lg font-bold text-slate-200">{{ "%.1f"|format(run.duration_seconds) }}s</div>
+    <!-- Telemetry & Cost Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono text-xs">
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-slate-500 text-[10px] uppercase font-semibold mb-1">DURATION</div>
+            <div id="stat-duration" class="text-base font-bold text-slate-200">{{ "%.1f"|format(run.duration_seconds) }}s</div>
         </div>
-        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-            <div class="text-slate-500 text-[11px] mb-1">THOUGHTS TOKENS</div>
-            <div id="stat-thoughts" class="text-lg font-bold text-purple-400">{{ "{:,}".format(run.thoughts_tokens) }}</div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-slate-500 text-[10px] uppercase font-semibold mb-1">ESTIMATED COST</div>
+            <div class="text-base font-bold text-emerald-400">{{ cost.formatted_total_cost if cost else "$0.00" }}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">{{ cost.formatted_input_cost if cost else "$0" }} in &bull; {{ cost.formatted_output_cost if cost else "$0" }} out</div>
         </div>
-        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-            <div class="text-slate-500 text-[11px] mb-1">CANDIDATE TOKENS</div>
-            <div id="stat-candidates" class="text-lg font-bold text-indigo-400">{{ "{:,}".format(run.candidates_tokens) }}</div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-slate-500 text-[10px] uppercase font-semibold mb-1">MODEL</div>
+            <div class="text-xs font-bold text-indigo-300 truncate" title="{{ cost.display_name if cost else 'Gemini 3.8 Flash' }}">{{ cost.display_name if cost else 'Gemini 3.8 Flash' }}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">${{ cost.input_rate_per_m if cost else 0.1 }}/M &bull; ${{ cost.output_rate_per_m if cost else 0.4 }}/M</div>
         </div>
-        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-            <div class="text-slate-500 text-[11px] mb-1">TOTAL TOKENS</div>
-            <div id="stat-tokens" class="text-lg font-bold text-slate-200">{{ "{:,}".format(run.total_tokens) }}</div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-slate-500 text-[10px] uppercase font-semibold mb-1">THOUGHTS TOKENS</div>
+            <div id="stat-thoughts" class="text-base font-bold text-purple-400">{{ "{:,}".format(run.thoughts_tokens) }}</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-slate-500 text-[10px] uppercase font-semibold mb-1">CANDIDATE TOKENS</div>
+            <div id="stat-candidates" class="text-base font-bold text-indigo-400">{{ "{:,}".format(run.candidates_tokens) }}</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-3.5">
+            <div class="text-slate-500 text-[10px] uppercase font-semibold mb-1">TOTAL TOKENS</div>
+            <div id="stat-tokens" class="text-base font-bold text-slate-200">{{ "{:,}".format(run.total_tokens) }}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">{{ "{:,}".format(cost.input_tokens if cost else run.prompt_tokens) }} in</div>
         </div>
     </div>
 

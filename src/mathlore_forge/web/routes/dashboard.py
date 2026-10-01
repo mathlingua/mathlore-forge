@@ -23,6 +23,12 @@ from mathlore_forge.storage.db import (
     get_db,
     reconcile_stray_review_runs,
 )
+from mathlore_forge.observability.pricing import (
+    aggregate_issue_analytics,
+    calculate_run_cost,
+    format_cost,
+    format_duration,
+)
 from mathlore_forge.web.auth import (
     ALLOWED_EMAIL,
     GOOGLE_CLIENT_ID,
@@ -149,6 +155,19 @@ async def dashboard_page(
     reconcile_stray_review_runs(db)
     runs = db.query(AgentRunRecord).order_by(desc(AgentRunRecord.started_at)).limit(100).all()
 
+    # Attach calculated cost to each run
+    total_cost_val = 0.0
+    for r in runs:
+        cost_calc = calculate_run_cost(
+            model_name=r.model_name,
+            prompt_tokens=r.prompt_tokens,
+            candidates_tokens=r.candidates_tokens,
+            thoughts_tokens=r.thoughts_tokens,
+            total_tokens=r.total_tokens,
+        )
+        setattr(r, "cost_info", cost_calc)
+        total_cost_val += cost_calc["total_cost"]
+
     # Aggregate stats
     active_runs = db.query(func.count(AgentRunRecord.id)).filter(AgentRunRecord.status == RunStatus.RUNNING).scalar() or 0
     awaiting_review = db.query(func.count(AgentRunRecord.id)).filter(AgentRunRecord.status == RunStatus.AWAITING_REVIEW).scalar() or 0
@@ -160,6 +179,7 @@ async def dashboard_page(
         "awaiting_review": awaiting_review,
         "completed_runs": completed_runs,
         "total_tokens": int(total_tokens),
+        "total_cost": format_cost(total_cost_val),
     }
 
     # Counts for status filter pills
@@ -185,6 +205,26 @@ async def dashboard_page(
     )
 
 
+@router.get("/analytics", response_class=HTMLResponse)
+@router.get("/costs", response_class=HTMLResponse)
+async def analytics_page(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: dict[str, Any] = Depends(require_admin_user),
+) -> Response:
+    """Renders issue cost and duration analytics page."""
+    reconcile_stray_review_runs(db)
+    analytics_data = aggregate_issue_analytics(db)
+    return templates.TemplateResponse(
+        request=request,
+        name="analytics.html",
+        context={
+            "user": user,
+            "analytics": analytics_data,
+        },
+    )
+
+
 @router.get("/runs/{run_id}", response_class=HTMLResponse)
 async def trajectory_page(
     run_id: str,
@@ -206,12 +246,21 @@ async def trajectory_page(
         except Exception:
             pass
 
+    cost_info = calculate_run_cost(
+        model_name=run.model_name,
+        prompt_tokens=run.prompt_tokens,
+        candidates_tokens=run.candidates_tokens,
+        thoughts_tokens=run.thoughts_tokens,
+        total_tokens=run.total_tokens,
+    )
+
     return templates.TemplateResponse(
         request=request,
         name="trajectory.html",
         context={
             "user": user,
             "run": run,
+            "cost": cost_info,
             "trajectory": trajectory_data,
             "markdown_summary": traj_rec.markdown_summary if traj_rec else "",
         },
