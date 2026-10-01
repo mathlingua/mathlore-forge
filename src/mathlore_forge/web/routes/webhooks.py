@@ -86,6 +86,11 @@ def has_forge_marker(issue_data: dict[str, Any]) -> bool:
     return False
 
 
+_issues_lock = asyncio.Lock()
+_active_issue_initializations: set[str] = set()
+_processed_comment_ids: set[int] = set()
+
+
 @router.post("/github")
 async def github_webhook(
     request: Request,
@@ -119,14 +124,59 @@ async def github_webhook(
         # Only process if action is opened or labeled, and author/sender is authorized
         if action in ("opened", "labeled"):
             if is_authorized_user(author) or is_authorized_user(sender):
+                # If event is 'labeled', verify that the added label is a Forge trigger
+                if action == "labeled":
+                    added_label = payload.get("label", {}).get("name", "").lower()
+                    if added_label not in (FORGE_LABEL, "forge-task", "mathlore-forge"):
+                        return {"status": "ignored", "reason": "non_forge_label"}
+
                 if has_forge_marker(issue):
-                    title = issue.get("title", "")
-                    body = issue.get("body", "") or ""
-                    labels = [
-                        lbl.get("name", "") if isinstance(lbl, dict) else str(lbl)
-                        for lbl in issue.get("labels", [])
-                    ]
-                    intent = classify_issue_intent(title=title, body=body, labels=labels)
+                    issue_key = f"{repo_full_name}#{issue_number}"
+                    async with _issues_lock:
+                        # 1. In-memory deduplication (catches race conditions between opened + labeled events)
+                        if issue_key in _active_issue_initializations:
+                            logger.info("Ignoring duplicate issues webhook for %s (already initializing)", issue_key)
+                            return {"status": "ignored", "reason": "already_initializing"}
+
+                        # 2. Database check: don't restart if already tracked
+                        db_mgr = init_db()
+                        with db_mgr.get_session() as session:
+                            rec = (
+                                session.query(IssueRecord)
+                                .filter_by(repo=repo_full_name, issue_number=issue_number)
+                                .first()
+                            )
+                            if rec:
+                                logger.info(
+                                    "Ignoring issues webhook for %s (already tracked with status=%s, plan_status=%s)",
+                                    issue_key,
+                                    rec.status,
+                                    rec.plan_status,
+                                )
+                                return {"status": "ignored", "reason": "already_tracked"}
+
+                            title = issue.get("title", "")
+                            body = issue.get("body", "") or ""
+                            author_login = issue.get("user", {}).get("login", "") or sender or "DominicKramer"
+                            labels = [
+                                lbl.get("name", "") if isinstance(lbl, dict) else str(lbl)
+                                for lbl in issue.get("labels", [])
+                            ]
+                            intent = classify_issue_intent(title=title, body=body, labels=labels)
+                            initial_status = "PLANNING" if intent == IssueIntent.HIGHER_ORDER_PLANNING else "IN_PROGRESS"
+                            new_issue_record = IssueRecord(
+                                repo=repo_full_name,
+                                issue_number=issue_number,
+                                title=title,
+                                body=body,
+                                author=author_login,
+                                status=initial_status,
+                                plan_status="PLANNING" if intent == IssueIntent.HIGHER_ORDER_PLANNING else None,
+                            )
+                            session.add(new_issue_record)
+                            session.commit()
+
+                        _active_issue_initializations.add(issue_key)
 
                     if intent == IssueIntent.HIGHER_ORDER_PLANNING:
                         asyncio.create_task(

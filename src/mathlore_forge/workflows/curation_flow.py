@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime, timezone
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import time
 import uuid
@@ -44,8 +45,27 @@ class CurationFlow:
     ):
         self.config = config or load_config()
         self.github_client = github_client or GitHubClient()
-        self.curator_agent = curator_agent or CuratorAgent(config=self.config)
+        self._curator_agent_override = curator_agent
         self.notification_service = notification_service or NotificationService()
+
+    @property
+    def curator_agent(self) -> CuratorAgent:
+        """Returns the curator agent instance, falling back to a default if configured."""
+        if self._curator_agent_override:
+            return self._curator_agent_override
+        return CuratorAgent(config=self.config)
+
+    def _create_workspace(self, repo: str, prefix: str) -> tuple[GitWorkspace, Path]:
+        temp_dir = Path(tempfile.mkdtemp(prefix=prefix))
+        local_mathlore = self.config.paths.mathlore_repo
+        if local_mathlore and Path(local_mathlore).is_dir():
+            workspace = GitWorkspace.init_from_existing(local_mathlore, temp_dir)
+        else:
+            repo_url = f"https://github.com/{repo}.git"
+            if self.github_client.token:
+                repo_url = f"https://x-access-token:{self.github_client.token}@github.com/{repo}.git"
+            workspace = GitWorkspace.clone(repo_url, temp_dir)
+        return workspace, temp_dir
 
     async def handle_initial_proposal(
         self,
@@ -97,12 +117,26 @@ class CurationFlow:
         db_session.add(run_record)
         db_session.commit()
 
+        temp_dir: Path | None = None
         try:
-            # 3. Formulate proposal via Curator Agent
-            proposal = await self.curator_agent.draft_proposal(
+            # 3. Formulate proposal via Curator Agent targeting a real cloned repository workspace
+            if self._curator_agent_override:
+                curator = self._curator_agent_override
+            else:
+                workspace, temp_dir = self._create_workspace(repo, f"forge_plan_{run_id}_")
+                curator = CuratorAgent(content_root=workspace.workspace_dir, config=self.config)
+
+            raw_proposal = await curator.draft_proposal(
                 issue_title=issue_title,
                 issue_body=issue_body,
             )
+
+            # Strip any pre-tool diagnostic notices or system error messages
+            idx = raw_proposal.find("## 📋 Mathlore Proposal")
+            if idx != -1:
+                proposal = raw_proposal[idx:].strip()
+            else:
+                proposal = raw_proposal.strip()
 
             # 4. Update IssueRecord
             issue_record.plan_markdown = proposal
@@ -146,6 +180,8 @@ class CurationFlow:
             run_record.duration_seconds = time.perf_counter() - start_time
             run_record.completed_at = datetime.now(timezone.utc)
             db_session.commit()
+            if temp_dir and temp_dir.is_dir():
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
         return proposal
 
@@ -185,13 +221,26 @@ class CurationFlow:
         db_session.add(run_record)
         db_session.commit()
 
+        temp_dir: Path | None = None
         try:
-            # Refine proposal
-            refined = await self.curator_agent.refine_proposal(
+            # Refine proposal via Curator Agent targeting cloned repository workspace
+            if self._curator_agent_override:
+                curator = self._curator_agent_override
+            else:
+                workspace, temp_dir = self._create_workspace(repo, f"forge_refine_{run_id}_")
+                curator = CuratorAgent(content_root=workspace.workspace_dir, config=self.config)
+
+            raw_refined = await curator.refine_proposal(
                 current_proposal=issue_record.plan_markdown,
                 revision=new_revision,
                 user_feedback=user_feedback,
             )
+
+            idx = raw_refined.find("## 📋 Mathlore Proposal")
+            if idx != -1:
+                refined = raw_refined[idx:].strip()
+            else:
+                refined = raw_refined.strip()
 
             issue_record.plan_markdown = refined
             issue_record.plan_revision = new_revision
@@ -233,6 +282,8 @@ class CurationFlow:
             run_record.duration_seconds = time.perf_counter() - start_time
             run_record.completed_at = datetime.now(timezone.utc)
             db_session.commit()
+            if temp_dir and temp_dir.is_dir():
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
         return refined
 
