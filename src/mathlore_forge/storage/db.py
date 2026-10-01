@@ -188,8 +188,25 @@ class Database:
         self.session_factory = sessionmaker(bind=self.engine, expire_on_commit=False)
 
     def create_tables(self) -> None:
-        """Creates all database tables defined in Base."""
+        """Creates all database tables defined in Base and migrates missing columns."""
         Base.metadata.create_all(self.engine)
+        if str(self.engine.url).startswith("sqlite"):
+            from sqlalchemy import text
+
+            with self.engine.connect() as conn:
+                try:
+                    res = conn.execute(text("PRAGMA table_info(forge_issues)")).fetchall()
+                    cols = {row[1] for row in res}
+                    if cols:
+                        if "plan_markdown" not in cols:
+                            conn.execute(text("ALTER TABLE forge_issues ADD COLUMN plan_markdown TEXT"))
+                        if "plan_status" not in cols:
+                            conn.execute(text("ALTER TABLE forge_issues ADD COLUMN plan_status VARCHAR(50)"))
+                        if "plan_revision" not in cols:
+                            conn.execute(text("ALTER TABLE forge_issues ADD COLUMN plan_revision INTEGER DEFAULT 0"))
+                    conn.commit()
+                except Exception:
+                    pass
 
     def get_session(self) -> Session:
         """Returns a new database session."""
@@ -202,7 +219,9 @@ _GLOBAL_DB: Database | None = None
 def init_db(db_url: str | None = None) -> Database:
     """Initializes the global database instance and tables."""
     global _GLOBAL_DB
-    url = db_url or "sqlite:///mathlore_forge.sqlite"
+    import os
+
+    url = db_url or os.getenv("DATABASE_URL") or "sqlite:///mathlore_forge.sqlite"
     _GLOBAL_DB = Database(url)
     _GLOBAL_DB.create_tables()
     return _GLOBAL_DB

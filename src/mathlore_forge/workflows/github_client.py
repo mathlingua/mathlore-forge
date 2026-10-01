@@ -246,6 +246,18 @@ class GitHubClient:
             data = resp.json()
             return data.get("html_url", "")
 
+    async def list_issue_comments(self, repo: str, issue_number: int) -> list[dict[str, Any]]:
+        """Lists all comments on an issue or pull request."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.base_url}/repos/{repo}/issues/{issue_number}/comments",
+                headers=self._headers(),
+                timeout=15.0,
+            )
+            if resp.status_code == 200:
+                return resp.json()
+            return []
+
     async def request_reviewers(self, repo: str, pr_number: int, reviewers: Sequence[str]) -> None:
         """Requests reviews from specified GitHub usernames."""
         try:

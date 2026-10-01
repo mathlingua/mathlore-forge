@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
+import shutil
 import tempfile
 import time
 import uuid
@@ -25,6 +26,7 @@ from mathlore_forge.storage.db import (
     RunType,
     TrajectoryRecord,
 )
+from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubIssue, GitHubPullRequest
 
@@ -264,5 +266,8 @@ class AuthoringFlow:
             )
             db_session.add(traj_record)
             db_session.commit()
+            if temp_dir and temp_dir.is_dir():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            sync_db_to_gcs_now()
 
         return run_record

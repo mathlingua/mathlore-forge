@@ -20,10 +20,34 @@ ensure_env_loaded()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Lifespan context manager for database initialization."""
+    """Lifespan context manager for database initialization and GCS persistence."""
+    import asyncio
+    from mathlore_forge.storage.gcs_sync import download_db_from_gcs, sync_db_to_gcs_now
+
     db_url = os.getenv("DATABASE_URL", "sqlite:///mathlore_forge.sqlite")
+    db_file = "mathlore_forge.sqlite"
+    if db_url.startswith("sqlite:///") and not db_url.startswith("sqlite:///:memory:"):
+        db_file = db_url.replace("sqlite:///", "")
+        download_db_from_gcs(db_file)
+
     init_db(db_url)
-    yield
+
+    stop_event = asyncio.Event()
+
+    async def _periodic_sync() -> None:
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=60.0)
+            except asyncio.TimeoutError:
+                sync_db_to_gcs_now(db_file)
+
+    sync_task = asyncio.create_task(_periodic_sync())
+    try:
+        yield
+    finally:
+        stop_event.set()
+        sync_task.cancel()
+        sync_db_to_gcs_now(db_file)
 
 
 def create_app() -> FastAPI:

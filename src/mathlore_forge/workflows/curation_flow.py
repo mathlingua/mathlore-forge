@@ -28,6 +28,7 @@ from mathlore_forge.storage.db import (
     RunType,
     TrajectoryRecord,
 )
+from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.authoring_flow import slugify
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubIssue
@@ -66,6 +67,18 @@ class CurationFlow:
                 repo_url = f"https://x-access-token:{self.github_client.token}@github.com/{repo}.git"
             workspace = GitWorkspace.clone(repo_url, temp_dir)
         return workspace, temp_dir
+
+    async def _recover_plan_from_github(self, repo: str, issue_number: int) -> str | None:
+        """Recovers the most recent proposal text from GitHub issue comments if DB was reset."""
+        comments = await self.github_client.list_issue_comments(repo, issue_number)
+        for c in reversed(comments):
+            body = c.get("body", "")
+            if "## 📋 Mathlore Proposal" in body or "### 📋 Mathlore Proposal" in body:
+                idx = body.find("## 📋 Mathlore Proposal")
+                if idx == -1:
+                    idx = body.find("### 📋 Mathlore Proposal")
+                return body[idx:].strip()
+        return None
 
     async def handle_initial_proposal(
         self,
@@ -182,6 +195,7 @@ class CurationFlow:
             db_session.commit()
             if temp_dir and temp_dir.is_dir():
                 shutil.rmtree(temp_dir, ignore_errors=True)
+            sync_db_to_gcs_now()
 
         return proposal
 
@@ -204,7 +218,30 @@ class CurationFlow:
             .first()
         )
         if not issue_record or not issue_record.plan_markdown:
-            raise ValueError(f"No active proposal found for {repo}#{issue_number} to refine.")
+            logger.info("Plan not found in DB for %s#%s; attempting recovery from GitHub issue comments", repo, issue_number)
+            plan_text = await self._recover_plan_from_github(repo, issue_number)
+            if plan_text:
+                gh_issue = await self.github_client.get_issue(repo, issue_number)
+                if not issue_record:
+                    issue_record = IssueRecord(
+                        repo=repo,
+                        issue_number=issue_number,
+                        title=gh_issue.title,
+                        body=gh_issue.body,
+                        author=gh_issue.author,
+                        status="PLANNING",
+                        plan_status="AWAITING_APPROVAL",
+                        plan_markdown=plan_text,
+                        plan_revision=1,
+                    )
+                    db_session.add(issue_record)
+                else:
+                    issue_record.plan_markdown = plan_text
+                    issue_record.plan_status = "AWAITING_APPROVAL"
+                    issue_record.plan_revision = issue_record.plan_revision or 1
+                db_session.commit()
+            else:
+                raise ValueError(f"No active proposal found for {repo}#{issue_number} to refine.")
 
         current_revision = issue_record.plan_revision or 1
         new_revision = current_revision + 1
@@ -284,6 +321,7 @@ class CurationFlow:
             db_session.commit()
             if temp_dir and temp_dir.is_dir():
                 shutil.rmtree(temp_dir, ignore_errors=True)
+            sync_db_to_gcs_now()
 
         return refined
 
@@ -306,7 +344,30 @@ class CurationFlow:
             .first()
         )
         if not issue_record or not issue_record.plan_markdown:
-            raise ValueError(f"No approved plan found for issue {repo}#{issue_number}.")
+            logger.info("Plan not found in DB for %s#%s; attempting recovery from GitHub issue comments", repo, issue_number)
+            plan_text = await self._recover_plan_from_github(repo, issue_number)
+            if plan_text:
+                gh_issue = await self.github_client.get_issue(repo, issue_number)
+                if not issue_record:
+                    issue_record = IssueRecord(
+                        repo=repo,
+                        issue_number=issue_number,
+                        title=gh_issue.title,
+                        body=gh_issue.body,
+                        author=gh_issue.author,
+                        status="PLANNING",
+                        plan_status="AWAITING_APPROVAL",
+                        plan_markdown=plan_text,
+                        plan_revision=1,
+                    )
+                    db_session.add(issue_record)
+                else:
+                    issue_record.plan_markdown = plan_text
+                    issue_record.plan_status = "AWAITING_APPROVAL"
+                    issue_record.plan_revision = issue_record.plan_revision or 1
+                db_session.commit()
+            else:
+                raise ValueError(f"No approved plan found for issue {repo}#{issue_number}.")
 
         issue_record.plan_status = "APPROVED"
         issue_record.status = "EXECUTING_PLAN"
@@ -488,5 +549,8 @@ class CurationFlow:
             )
             db_session.add(traj_record)
             db_session.commit()
+            if temp_dir and temp_dir.is_dir():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            sync_db_to_gcs_now()
 
         return run_record

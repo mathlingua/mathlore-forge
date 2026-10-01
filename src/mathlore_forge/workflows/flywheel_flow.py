@@ -26,6 +26,7 @@ from mathlore_forge.storage.db import (
     RunStatus,
     RunType,
 )
+from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.github_client import GitHubClient
 
@@ -410,5 +411,6 @@ class FlywheelFlow:
             run_record.duration_seconds = time.perf_counter() - start_time
             run_record.completed_at = datetime.now(timezone.utc)
             db_session.commit()
+            sync_db_to_gcs_now()
 
         return run_record

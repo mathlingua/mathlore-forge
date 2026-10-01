@@ -120,8 +120,8 @@ resource "google_cloud_run_v2_service" "web_service" {
     service_account = google_service_account.forge_sa.email
 
     scaling {
-      min_instance_count = 0
-      max_instance_count = 5
+      min_instance_count = 1
+      max_instance_count = 1
     }
 
     containers {
@@ -129,8 +129,8 @@ resource "google_cloud_run_v2_service" "web_service" {
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "1Gi"
+          cpu    = "2"
+          memory = "4Gi"
         }
       }
 
@@ -146,6 +146,10 @@ resource "google_cloud_run_v2_service" "web_service" {
       env {
         name  = "ALLOWED_GITHUB_AUTHOR"
         value = var.allowed_github_author
+      }
+      env {
+        name  = "GCS_DATA_BUCKET"
+        value = "mathlore-forge-data-storage"
       }
 
       # Secrets mounted from Secret Manager

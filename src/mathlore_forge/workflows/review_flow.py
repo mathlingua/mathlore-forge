@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+import shutil
 import tempfile
 import time
 import uuid
@@ -23,6 +24,7 @@ from mathlore_forge.storage.db import (
     RunType,
     TrajectoryRecord,
 )
+from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.tools.git_tools import GitWorkspace
 from mathlore_forge.workflows.github_client import GitHubClient, GitHubReviewComment
 
@@ -248,5 +250,8 @@ class ReviewFlow:
             )
             db_session.add(traj_record)
             db_session.commit()
+            if temp_dir and temp_dir.is_dir():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            sync_db_to_gcs_now()
 
         return run_record
