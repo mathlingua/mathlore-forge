@@ -119,11 +119,32 @@ class FlywheelFlow:
 
         # Check if PR is already merged
         if gh_pr.merged:
+            if pr_record:
+                pr_record.status = "MERGED"
+            if issue_record:
+                issue_record.status = "RESOLVED"
+                issue_record.plan_status = "COMPLETED"
+
+            prior_runs = (
+                db_session.query(AgentRunRecord)
+                .filter(
+                    (AgentRunRecord.pr_number == pr_number) |
+                    ((AgentRunRecord.issue_id == issue_record.id) if issue_record else False)
+                )
+                .filter(AgentRunRecord.status.in_([RunStatus.AWAITING_REVIEW, RunStatus.RUNNING, RunStatus.ADDRESSING_COMMENTS, RunStatus.QUEUED]))
+                .all()
+            )
+            for r in prior_runs:
+                r.status = RunStatus.COMPLETED
+                if not r.completed_at:
+                    r.completed_at = datetime.now(timezone.utc)
+
             run_record.status = RunStatus.COMPLETED
             run_record.summary = f"Pull request #{pr_number} is already merged."
             run_record.completed_at = datetime.now(timezone.utc)
             run_record.duration_seconds = time.perf_counter() - start_time
             db_session.commit()
+            sync_db_to_gcs_now()
             return run_record
 
         # 4. Post immediate acknowledgment comment on PR
@@ -355,6 +376,7 @@ class FlywheelFlow:
                 )
                 if issue_record:
                     issue_record.status = "RESOLVED"
+                    issue_record.plan_status = "COMPLETED"
                     try:
                         await self.github_client.close_issue(
                             repo=mathlore_repo,
@@ -368,6 +390,21 @@ class FlywheelFlow:
                             issue_record.issue_number,
                             close_err,
                         )
+
+                # Mark all previous runs for this PR / issue that are AWAITING_REVIEW (or active) as COMPLETED
+                prior_runs = (
+                    db_session.query(AgentRunRecord)
+                    .filter(
+                        (AgentRunRecord.pr_number == pr_number) |
+                        ((AgentRunRecord.issue_id == issue_record.id) if issue_record else False)
+                    )
+                    .filter(AgentRunRecord.status.in_([RunStatus.AWAITING_REVIEW, RunStatus.RUNNING, RunStatus.ADDRESSING_COMMENTS, RunStatus.QUEUED]))
+                    .all()
+                )
+                for r in prior_runs:
+                    r.status = RunStatus.COMPLETED
+                    if not r.completed_at:
+                        r.completed_at = datetime.now(timezone.utc)
 
                 pr_final_comment = (
                     f"### ✅ Pull Request Accepted & Merged\n\n"

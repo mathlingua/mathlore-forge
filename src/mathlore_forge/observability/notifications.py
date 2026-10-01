@@ -42,7 +42,7 @@ class NotificationService:
             f"Review the proposal and leave feedback or approve it on GitHub:\n"
             f"{issue_link}\n\n"
             f"When you are satisfied with the plan, reply to the issue with:\n"
-            f"/forge execute\n\n"
+            f"/forge accept\n\n"
             f"---\n"
             f"Mathlore Forge Autonomous Engine"
         )

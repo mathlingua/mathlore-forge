@@ -22,6 +22,7 @@ from mathlore_forge.storage.db import (
     RunType,
     TrajectoryRecord,
     get_db,
+    reconcile_stray_review_runs,
 )
 from mathlore_forge.web.auth import require_admin_user
 from mathlore_forge.workflows.authoring_flow import AuthoringFlow
@@ -70,6 +71,7 @@ def list_runs(
     user: dict[str, Any] = Depends(require_admin_user),
 ) -> list[dict[str, Any]]:
     """Lists agent runs, newest first."""
+    reconcile_stray_review_runs(db)
     query = db.query(AgentRunRecord)
     if status_filter:
         query = query.filter(AgentRunRecord.status == status_filter)
@@ -102,6 +104,7 @@ def get_run(
     user: dict[str, Any] = Depends(require_admin_user),
 ) -> dict[str, Any]:
     """Retrieves full details for a specific run."""
+    reconcile_stray_review_runs(db)
     run = db.query(AgentRunRecord).filter_by(id=run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")

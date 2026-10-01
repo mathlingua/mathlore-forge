@@ -6,12 +6,23 @@ import asyncio
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
+import re
 from typing import Any
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from mathlore_forge.config import ensure_env_loaded
-from mathlore_forge.storage.db import AgentRunRecord, IssueRecord, RunStatus, RunType, get_db, init_db
+from mathlore_forge.storage.db import (
+    AgentRunRecord,
+    IssueRecord,
+    PullRequestRecord,
+    RunStatus,
+    RunType,
+    get_db,
+    init_db,
+    reconcile_stray_review_runs,
+)
 from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
 from mathlore_forge.workflows.authoring_flow import AuthoringFlow
 from mathlore_forge.workflows.curation_flow import CurationFlow
@@ -200,7 +211,115 @@ async def github_webhook(
                             "issue": issue_number,
                         }
 
-    # 3. Handle Pull Request Review Event (Approval / Changes Requested)
+        elif action == "closed":
+            db_mgr = init_db()
+            with db_mgr.get_session() as session:
+                rec = (
+                    session.query(IssueRecord)
+                    .filter_by(repo=repo_full_name, issue_number=issue_number)
+                    .first()
+                )
+                if rec:
+                    rec.status = "RESOLVED"
+                    rec.plan_status = "COMPLETED"
+
+                runs = (
+                    session.query(AgentRunRecord)
+                    .filter_by(repo=repo_full_name, issue_number=issue_number)
+                    .filter(
+                        AgentRunRecord.status.in_(
+                            [
+                                RunStatus.AWAITING_REVIEW,
+                                RunStatus.RUNNING,
+                                RunStatus.ADDRESSING_COMMENTS,
+                                RunStatus.QUEUED,
+                            ]
+                        )
+                    )
+                    .all()
+                )
+                for r in runs:
+                    r.status = RunStatus.COMPLETED
+                    if not r.completed_at:
+                        r.completed_at = datetime.now(timezone.utc)
+                session.commit()
+                sync_db_to_gcs_now()
+            return {"status": "accepted", "action": "issue_closed", "issue": issue_number}
+
+    # 3. Handle Pull Request Events (Closed / Merged)
+    elif event_type == "pull_request":
+        action = payload.get("action")
+        pr = payload.get("pull_request", {})
+        pr_number = pr.get("number")
+        is_merged = pr.get("merged", False)
+
+        if action == "closed":
+            db_mgr = init_db()
+            with db_mgr.get_session() as session:
+                pr_record = (
+                    session.query(PullRequestRecord)
+                    .filter_by(repo=repo_full_name, pr_number=pr_number)
+                    .first()
+                )
+                issue_record = (
+                    session.query(IssueRecord).filter_by(id=pr_record.issue_id).first()
+                    if (pr_record and pr_record.issue_id)
+                    else None
+                )
+                if not issue_record and pr.get("body"):
+                    m = re.search(r"(?:Closes|Resolves|Fixes)\s+#(\d+)", pr.get("body", ""), re.IGNORECASE)
+                    if m:
+                        inferred_num = int(m.group(1))
+                        issue_record = (
+                            session.query(IssueRecord)
+                            .filter_by(repo=repo_full_name, issue_number=inferred_num)
+                            .first()
+                        )
+
+                new_status = RunStatus.COMPLETED if is_merged else RunStatus.CANCELLED
+                if pr_record:
+                    pr_record.status = "MERGED" if is_merged else "CLOSED"
+                if issue_record:
+                    if is_merged:
+                        issue_record.status = "RESOLVED"
+                        issue_record.plan_status = "COMPLETED"
+                    else:
+                        issue_record.status = "CLOSED"
+
+                runs = (
+                    session.query(AgentRunRecord)
+                    .filter(
+                        (AgentRunRecord.pr_number == pr_number)
+                        | ((AgentRunRecord.issue_id == issue_record.id) if issue_record else False)
+                    )
+                    .filter(
+                        AgentRunRecord.status.in_(
+                            [
+                                RunStatus.AWAITING_REVIEW,
+                                RunStatus.RUNNING,
+                                RunStatus.ADDRESSING_COMMENTS,
+                                RunStatus.QUEUED,
+                            ]
+                        )
+                    )
+                    .all()
+                )
+                for r in runs:
+                    r.status = new_status
+                    if not r.completed_at:
+                        r.completed_at = datetime.now(timezone.utc)
+
+                session.commit()
+                sync_db_to_gcs_now()
+
+            return {
+                "status": "accepted",
+                "action": "pr_closed",
+                "merged": is_merged,
+                "pr": pr_number,
+            }
+
+    # 4. Handle Pull Request Review Event (Approval / Changes Requested)
     elif event_type == "pull_request_review":
         action = payload.get("action")
         pr = payload.get("pull_request", {})
@@ -211,7 +330,7 @@ async def github_webhook(
 
         if action == "submitted" and is_authorized_user(review_author):
             if review_state == "approved":
-                # Step 8 & 9: Trigger Flywheel and Merge
+                # Trigger Flywheel and Merge
                 asyncio.create_task(
                     _run_flywheel_task(repo_full_name, pr_number, base_url=base_url)
                 )
@@ -222,7 +341,7 @@ async def github_webhook(
                     "pr": pr_number,
                 }
             elif review_state in ("changes_requested", "commented"):
-                # Step 5: Address Comments
+                # Address Review Comments
                 asyncio.create_task(
                     _run_review_task(repo_full_name, pr_number)
                 )
@@ -233,7 +352,7 @@ async def github_webhook(
                     "pr": pr_number,
                 }
 
-    # 4. Handle Issue/PR Comments (Slash Commands & Interactive Proposal Refinement)
+    # 5. Handle Issue/PR Comments (Focused Commands & Interactive Proposal Refinement)
     elif event_type == "issue_comment":
         action = payload.get("action")
         comment = payload.get("comment", {})
@@ -251,7 +370,9 @@ async def github_webhook(
 
         if action == "created" and is_authorized_user(comment_author):
             if is_pr:
-                if "/forge address" in comment_body or "@mathlore-forge address" in comment_body:
+                # PR Phase:
+                # 1) /forge address -> Address review comments
+                if any(cmd in comment_body for cmd in ("/forge address", "@mathlore-forge address", "/forge fix")):
                     asyncio.create_task(
                         _run_review_task(repo_full_name, issue_or_pr_number)
                     )
@@ -260,7 +381,8 @@ async def github_webhook(
                         "workflow": "address_review_comments",
                         "pr": issue_or_pr_number,
                     }
-                elif any(cmd in comment_body for cmd in ("/forge accept", "/forge approve", "/forge merge", "@mathlore-forge accept", "@mathlore-forge approve")):
+                # 2) /forge accept -> Accept and merge the PR
+                elif any(cmd in comment_body for cmd in ("/forge accept", "@mathlore-forge accept", "/forge approve", "/forge merge", "/forge execute")):
                     asyncio.create_task(
                         _run_flywheel_task(repo_full_name, issue_or_pr_number, base_url=base_url)
                     )
@@ -270,8 +392,9 @@ async def github_webhook(
                         "pr": issue_or_pr_number,
                     }
             else:
-                # Dominic interacting with an Issue (Planning, Refinement, Execution)
-                if any(cmd in comment_body for cmd in ("/forge execute", "/forge approve-plan", "/forge approve", "/forge accept", "@mathlore-forge execute", "@mathlore-forge approve", "@mathlore-forge accept")):
+                # Issue Phase:
+                # 1) /forge accept -> Accept proposal and execute authoring
+                if any(cmd in comment_body for cmd in ("/forge accept", "@mathlore-forge accept", "/forge execute", "/forge approve-plan", "/forge approve")):
                     asyncio.create_task(
                         _run_curation_execution_task(repo_full_name, issue_or_pr_number, base_url=base_url)
                     )

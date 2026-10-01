@@ -21,6 +21,7 @@ from mathlore_forge.storage.db import (
     RunStatus,
     TrajectoryRecord,
     get_db,
+    reconcile_stray_review_runs,
 )
 from mathlore_forge.web.auth import (
     ALLOWED_EMAIL,
@@ -145,6 +146,7 @@ async def dashboard_page(
     user: dict[str, Any] = Depends(require_admin_user),
 ) -> Response:
     """Renders main dashboard page."""
+    reconcile_stray_review_runs(db)
     runs = db.query(AgentRunRecord).order_by(desc(AgentRunRecord.started_at)).limit(100).all()
 
     # Aggregate stats
@@ -191,6 +193,7 @@ async def trajectory_page(
     user: dict[str, Any] = Depends(require_admin_user),
 ) -> Response:
     """Renders trajectory inspector page for an agent run."""
+    reconcile_stray_review_runs(db)
     run = db.query(AgentRunRecord).filter_by(id=run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")

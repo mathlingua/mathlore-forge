@@ -67,8 +67,8 @@ Welcome to **Mathlore Forge**! This guide is written for humans to clearly expla
                                 │
             ┌───────────────────┴───────────────────┐
             │                                       │
-            ▼ (Feedback Needed)                     ▼ (Approved!)
-  Dominic leaves review comments         Dominic comments `/forge approve`
+            ▼ (Feedback Needed)                     ▼ (Accepted!)
+  Dominic leaves review comments         Dominic comments `/forge accept`
             │                                       │
             ▼                                       ▼
   Comments Trigger Review Flow             Self-Improvement Flywheel
@@ -176,18 +176,17 @@ If the generated Mathlingua content needs revisions, corrections, or additional 
 
 ---
 
-### Step 5: Approving & Landing the PR
+### Step 5: Accepting & Merging the PR
 
 When the PR is ready to be merged:
 
-#### Option A: Comment `/forge approve` (Recommended)
+#### Option A: Comment `/forge accept` (Recommended)
 On the PR conversation tab, leave a comment:
 ```
-/forge approve
+/forge accept
 ```
-*(or `/forge merge`)*
 
-> **Why this is recommended**: Because the PR was opened using your GitHub Personal Access Token, GitHub considers you the author of the Pull Request. GitHub's interface typically disables the native "Approve" button for the PR author (*"You cannot approve your own pull request"*). Commenting `/forge approve` works instantly and cleanly bypasses that restriction.
+> **Why this is recommended**: Commenting `/forge accept` triggers automated pre-merge quality validation (`mlg check`), runs self-healing if needed, waits for all CI checks to pass, extracts flywheel learnings, and squash-merges into `main`. It also cleanly bypasses GitHub's restriction preventing PR authors from clicking native "Approve".
 
 #### Option B: Native GitHub Approval
 If your repository branch protection settings allow approving your own PR:
@@ -298,9 +297,8 @@ Once you are satisfied with the proposal:
 #### In GitHub:
 Leave a comment on the issue:
 ```
-/forge execute
+/forge accept
 ```
-*(or `/forge approve-plan`)*
 
 #### On the Web Dashboard:
 Navigate to [http://localhost:8080](http://localhost:8080). You will see the issue marked with the purple **Plan Proposed** badge. Click the **Execute** button next to the run.
@@ -327,18 +325,18 @@ uv run mathlore-forge worker --repo mathlingua/mathlore --execute-plan 42
 
 ---
 
-## 4. Slash Commands Reference
-
-You can control Mathlore Forge directly from GitHub issue and PR comments using these commands:
+## 4. Focused Commands Reference
+ 
+Mathlore Forge uses a minimal, focused set of commands so that the workflow is completely consistent:
 
 | Command | Where to Use | Action |
 | :--- | :--- | :--- |
-| **`/forge execute`** | Issue Conversation | Approves the latest revision of an architectural proposal and spawns the authoring agent to implement it and open a PR. |
-| **`/forge approve-plan`** | Issue Conversation | Alias for `/forge execute`. |
-| **`/forge plan`** | Issue Conversation | Forces the Curator Agent to re-evaluate and draft a new plan for the issue. |
-| **`/forge address`** | PR Conversation | Instructs the agent to read all unresolved review comments on the PR, modify the code, re-test with `mlg`, and push a new commit. |
-| **`/forge approve`** | PR Conversation | Approves the PR, executes the self-improvement flywheel (guidelines + golden test), and squash-merges the PR. |
-| **`/forge merge`** | PR Conversation | Alias for `/forge approve`. |
+| **`/forge accept`** | **Issue Conversation** | Accepts the latest revision of the curation proposal, authors the content, validates via `mlg check`, and opens a PR. |
+| **`/forge accept`** | **PR Conversation** | Accepts the pull request, runs quality gates (`mlg check`), waits for CI checks, captures flywheel learnings, and merges into `main`. |
+| **`/forge address`** | **PR Conversation** | Instructs the agent to read all unresolved review comments on the PR, modify code, re-test with `mlg check`, and push a new commit. |
+| *(plain comment)* | **Issue Conversation** | Any comment on an issue with a proposed plan is treated as feedback and generates a refined proposal revision. |
+
+> **Graceful Aliases**: Legacy aliases such as `/forge execute` on issues or `/forge approve` on PRs continue to be supported for backwards compatibility, but `/forge accept` is the single canonical command for accepting at any stage.
 
 ---
 

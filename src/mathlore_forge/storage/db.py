@@ -214,6 +214,65 @@ class Database:
         return self.session_factory()
 
 
+def reconcile_stray_review_runs(session: Session) -> int:
+    """Finds any runs in AWAITING_REVIEW (or active/queued) whose associated PR has already
+    been merged or closed, or whose issue has already been resolved or closed,
+    and updates their status to COMPLETED (or CANCELLED).
+    """
+    updated_count = 0
+    awaiting_runs = (
+        session.query(AgentRunRecord)
+        .filter(AgentRunRecord.status.in_([RunStatus.AWAITING_REVIEW, RunStatus.RUNNING, RunStatus.ADDRESSING_COMMENTS, RunStatus.QUEUED]))
+        .all()
+    )
+    for run in awaiting_runs:
+        should_complete = False
+        should_cancel = False
+
+        # 1. Check attached PR record or PR number
+        pr_rec = run.pull_request
+        if not pr_rec and run.pr_number:
+            pr_rec = session.query(PullRequestRecord).filter_by(repo=run.repo, pr_number=run.pr_number).first()
+
+        if pr_rec:
+            if pr_rec.status == "MERGED":
+                should_complete = True
+            elif pr_rec.status in ("CLOSED", "REJECTED", "ABANDONED"):
+                should_cancel = True
+
+        # 2. Check attached Issue record or Issue number
+        if not should_complete and not should_cancel:
+            issue_rec = run.issue
+            if not issue_rec and run.issue_number:
+                issue_rec = session.query(IssueRecord).filter_by(repo=run.repo, issue_number=run.issue_number).first()
+
+            if issue_rec:
+                if issue_rec.status in ("RESOLVED", "COMPLETED", "CLOSED") or issue_rec.plan_status == "COMPLETED":
+                    should_complete = True
+                elif issue_rec.status == "ABANDONED":
+                    should_cancel = True
+
+        if should_complete:
+            run.status = RunStatus.COMPLETED
+            if not run.completed_at:
+                run.completed_at = _utc_now()
+            updated_count += 1
+        elif should_cancel and run.status == RunStatus.AWAITING_REVIEW:
+            run.status = RunStatus.CANCELLED
+            if not run.completed_at:
+                run.completed_at = _utc_now()
+            updated_count += 1
+
+    if updated_count > 0:
+        session.commit()
+        try:
+            from mathlore_forge.storage.gcs_sync import sync_db_to_gcs_now
+            sync_db_to_gcs_now()
+        except Exception:
+            pass
+    return updated_count
+
+
 _GLOBAL_DB: Database | None = None
 
 
@@ -225,6 +284,12 @@ def init_db(db_url: str | None = None) -> Database:
     url = db_url or os.getenv("DATABASE_URL") or "sqlite:///mathlore_forge.sqlite"
     _GLOBAL_DB = Database(url)
     _GLOBAL_DB.create_tables()
+    # Run automatic reconciliation of any stray review runs
+    try:
+        with _GLOBAL_DB.get_session() as s:
+            reconcile_stray_review_runs(s)
+    except Exception:
+        pass
     return _GLOBAL_DB
 
 

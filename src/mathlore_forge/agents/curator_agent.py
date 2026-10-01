@@ -86,7 +86,7 @@ Hello @DominicKramer! I have analyzed the Mathlore repository and prepared an ar
 ---
 ### 💬 Next Steps
 - Please leave any feedback, adjustments, or deletions in the comments below.
-- Once you are happy with this plan, simply reply with **`/forge execute`** (or **`/forge approve-plan`**) to launch autonomous authoring!
+- Once you are happy with this plan, simply reply with **`/forge accept`** to launch autonomous authoring!
 ```
 """
 
@@ -237,7 +237,7 @@ class CuratorAgent:
             f"1. Carefully adapt the proposal to incorporate Dominic's exact feedback.\n"
             f"2. Clearly highlight what was added, removed, or altered in a **Changelog from Revision {revision - 1}** section.\n"
             f"3. Output the updated, complete **Revision {revision}** proposal.\n"
-            f"4. Conclude by asking Dominic to reply with `/forge execute` once he is satisfied."
+            f"4. Conclude by asking Dominic to reply with `/forge accept` once he is satisfied."
         )
 
         agent = self._build_agent()

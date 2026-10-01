@@ -170,7 +170,7 @@ class CurationFlow:
                     f"{proposal}\n\n"
                     f"---\n"
                     f"🔍 **Telemetry & Compiler Logs**: [View Run `{run_id}` on Mathlore Forge Dashboard]({dashboard_url})\n\n"
-                    f"💬 *Next Steps:* Comment on this issue to refine the plan, or comment `/forge execute` to approve and begin authoring."
+                    f"💬 *Next Steps:* Comment on this issue to refine the plan, or comment `/forge accept` to approve and begin authoring."
                 )
             await self.github_client.create_issue_comment(
                 repo=repo,
@@ -296,7 +296,7 @@ class CurationFlow:
                     f"{refined}\n\n"
                     f"---\n"
                     f"🔍 **Telemetry & Compiler Logs**: [View Run `{run_id}` on Mathlore Forge Dashboard]({dashboard_url})\n\n"
-                    f"💬 *Next Steps:* Comment on this issue to refine further, or comment `/forge execute` to approve and begin authoring."
+                    f"💬 *Next Steps:* Comment on this issue to refine further, or comment `/forge accept` to approve and begin authoring."
                 )
             await self.github_client.create_issue_comment(
                 repo=repo,
@@ -383,7 +383,7 @@ class CurationFlow:
             repo=repo,
             issue_or_pr_number=issue_number,
             body=(
-                f"### 🚀 Plan Approved by @DominicKramer\n\n"
+                f"### 🚀 Plan Accepted by @DominicKramer\n\n"
                 f"Launching autonomous authoring agent to execute Revision {issue_record.plan_revision} of the plan.\n"
                 f"The agent will create files, register them in `toc` tables of contents, validate with `mlg check`, and open a Pull Request.\n\n"
                 f"Track live execution progress on the dashboard: [View Run on Mathlore Forge Dashboard]({dash_link})"
@@ -562,7 +562,7 @@ class CurationFlow:
                         body=(
                             f"@{issue_record.author} The approved curation plan for issue #{issue_number} has been implemented.\n\n"
                             f"{preview_msg}"
-                            f"- To request modifications: comment `/forge address`\n"
+                            f"- To request modifications: leave review comments and comment `/forge address`\n"
                             f"- To accept and merge: comment `/forge accept` (I will validate via `mlg check`, resolve any compiler issues, wait for CI checks, and merge into `main`)"
                         ),
                     )

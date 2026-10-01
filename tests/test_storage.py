@@ -13,6 +13,7 @@ from mathlore_forge.storage.db import (
     RunStatus,
     RunType,
     TrajectoryRecord,
+    reconcile_stray_review_runs,
 )
 
 
@@ -112,3 +113,54 @@ def test_review_comment_resolution(session):
     updated = session.query(ReviewCommentRecord).filter_by(comment_github_id=98765).first()
     assert updated.addressed is True
     assert "Moved" in updated.reply_body
+
+
+def test_reconcile_stray_review_runs(session):
+    # 1. Create issue that is resolved
+    issue = IssueRecord(
+        repo="mathlingua/mathlore",
+        issue_number=201,
+        title="Issue 201",
+        status="RESOLVED",
+        plan_status="COMPLETED",
+    )
+    session.add(issue)
+    session.flush()
+
+    # 2. Create PR that is merged
+    pr = PullRequestRecord(
+        repo="mathlingua/mathlore",
+        pr_number=201,
+        branch_name="forge/issue-201",
+        title="PR 201",
+        issue_id=issue.id,
+        status="MERGED",
+    )
+    session.add(pr)
+    session.flush()
+
+    # 3. Create run that is still AWAITING_REVIEW
+    run = AgentRunRecord(
+        id="run_exec_stray_201",
+        repo="mathlingua/mathlore",
+        run_type=RunType.PLAN_EXECUTION,
+        status=RunStatus.AWAITING_REVIEW,
+        issue_id=issue.id,
+        issue_number=201,
+        pr_id=pr.id,
+        pr_number=201,
+    )
+    session.add(run)
+    session.commit()
+
+    assert run.status == RunStatus.AWAITING_REVIEW
+
+    # 4. Run reconciler
+    fixed = reconcile_stray_review_runs(session)
+    assert fixed == 1
+
+    # 5. Verify run is now COMPLETED
+    session.refresh(run)
+    assert run.status == RunStatus.COMPLETED
+    assert run.completed_at is not None
+

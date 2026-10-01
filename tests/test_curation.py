@@ -5,9 +5,25 @@ import pytest
 from fastapi.testclient import TestClient
 
 from mathlore_forge.observability.notifications import NotificationService
-from mathlore_forge.storage.db import IssueRecord, init_db
+from mathlore_forge.storage.db import AgentRunRecord, IssueRecord, PullRequestRecord, init_db
 from mathlore_forge.web.app import create_app
 from mathlore_forge.workflows.intent import IssueIntent, classify_issue_intent
+
+
+@pytest.fixture(autouse=True)
+def clean_test_db():
+    db = init_db()
+    with db.get_session() as s:
+        s.query(IssueRecord).filter(IssueRecord.issue_number.in_([88, 89])).delete()
+        s.query(AgentRunRecord).filter(AgentRunRecord.issue_number.in_([88, 89])).delete()
+        s.query(PullRequestRecord).filter(PullRequestRecord.pr_number.in_([88, 89])).delete()
+        s.commit()
+    yield
+    with db.get_session() as s:
+        s.query(IssueRecord).filter(IssueRecord.issue_number.in_([88, 89])).delete()
+        s.query(AgentRunRecord).filter(AgentRunRecord.issue_number.in_([88, 89])).delete()
+        s.query(PullRequestRecord).filter(PullRequestRecord.pr_number.in_([88, 89])).delete()
+        s.commit()
 
 
 def test_classify_issue_intent_direct():

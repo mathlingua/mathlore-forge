@@ -260,7 +260,7 @@ class AuthoringFlow:
                         pr.number,
                         f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR.\n\n"
                         f"{preview_msg}"
-                        f"- To request changes: comment `/forge address`\n"
+                        f"- To request changes: leave review comments and comment `/forge address`\n"
                         f"- To accept and merge: comment `/forge accept` (I will automatically run `mlg check`, self-heal any errors, wait for checks to pass, and merge into `main`)",
                     )
                 except Exception:
