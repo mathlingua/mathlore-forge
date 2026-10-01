@@ -212,7 +212,7 @@ async def github_webhook(
             if review_state == "approved":
                 # Step 8 & 9: Trigger Flywheel and Merge
                 asyncio.create_task(
-                    _run_flywheel_task(repo_full_name, pr_number)
+                    _run_flywheel_task(repo_full_name, pr_number, base_url=base_url)
                 )
                 return {
                     "status": "accepted",
@@ -259,9 +259,9 @@ async def github_webhook(
                         "workflow": "address_review_comments",
                         "pr": issue_or_pr_number,
                     }
-                elif "/forge approve" in comment_body or "/forge merge" in comment_body:
+                elif any(cmd in comment_body for cmd in ("/forge accept", "/forge approve", "/forge merge", "@mathlore-forge accept", "@mathlore-forge approve")):
                     asyncio.create_task(
-                        _run_flywheel_task(repo_full_name, issue_or_pr_number)
+                        _run_flywheel_task(repo_full_name, issue_or_pr_number, base_url=base_url)
                     )
                     return {
                         "status": "accepted",
@@ -270,7 +270,7 @@ async def github_webhook(
                     }
             else:
                 # Dominic interacting with an Issue (Planning, Refinement, Execution)
-                if any(cmd in comment_body for cmd in ("/forge execute", "/forge approve-plan", "/forge approve", "@mathlore-forge execute", "@mathlore-forge approve")):
+                if any(cmd in comment_body for cmd in ("/forge execute", "/forge approve-plan", "/forge approve", "/forge accept", "@mathlore-forge execute", "@mathlore-forge approve", "@mathlore-forge accept")):
                     asyncio.create_task(
                         _run_curation_execution_task(repo_full_name, issue_or_pr_number, base_url=base_url)
                     )
@@ -554,12 +554,35 @@ async def _run_review_task(repo: str, pr_number: int) -> None:
             logger.error("Review resolution flow failed for %s#%s: %s", repo, pr_number, e, exc_info=True)
 
 
-async def _run_flywheel_task(repo: str, pr_number: int) -> None:
-    """Background execution runner for flywheel and PR merging."""
+async def _run_flywheel_task(
+    repo: str,
+    pr_number: int,
+    base_url: str = "https://mathlore-forge-web-bx7vyixa6a-uc.a.run.app",
+) -> None:
+    """Background execution runner for flywheel, pre-merge validation, and PR merging."""
     db_mgr = init_db()
     with db_mgr.get_session() as session:
         flow = FlywheelFlow()
+        run_id = f"run_flywheel_{uuid.uuid4().hex[:12]}"
+        run_url = f"{base_url}/runs/{run_id}"
         try:
-            await flow.execute(mathlore_repo=repo, pr_number=pr_number, db_session=session)
+            await flow.execute(
+                mathlore_repo=repo,
+                pr_number=pr_number,
+                db_session=session,
+                run_id=run_id,
+                dashboard_url=run_url,
+            )
         except Exception as e:
             logger.error("Flywheel flow failed for %s#%s: %s", repo, pr_number, e, exc_info=True)
+            try:
+                err_msg = (
+                    f"### ⚠️ Mathlore Forge Acceptance / Merge Error\n\n"
+                    f"An error occurred while validating or merging PR #{pr_number}:\n"
+                    f"> {e}\n\n"
+                    f"- **Run ID**: `{run_id}`\n"
+                    f"- **Telemetry & Logs**: [Inspect Error on Dashboard]({run_url})\n"
+                )
+                await flow.github_client.create_issue_comment(repo=repo, issue_or_pr_number=pr_number, body=err_msg)
+            except Exception:
+                pass

@@ -49,6 +49,7 @@ class GitHubPullRequest(BaseModel):
     body: str
     head_branch: str
     base_branch: str
+    head_sha: str = ""
     state: str
     html_url: str
     merged: bool = False
@@ -147,6 +148,7 @@ class GitHubClient:
                 body=data.get("body", "") or "",
                 head_branch=data["head"]["ref"],
                 base_branch=data["base"]["ref"],
+                head_sha=data.get("head", {}).get("sha", ""),
                 state=data["state"],
                 html_url=data["html_url"],
             )
@@ -167,6 +169,7 @@ class GitHubClient:
                 body=data.get("body", "") or "",
                 head_branch=data["head"]["ref"],
                 base_branch=data["base"]["ref"],
+                head_sha=data.get("head", {}).get("sha", ""),
                 state=data["state"],
                 html_url=data["html_url"],
                 merged=data.get("merged", False),
@@ -298,3 +301,75 @@ class GitHubClient:
                 timeout=15.0,
             )
             resp.raise_for_status()
+
+    async def get_combined_status(self, repo: str, ref: str) -> str:
+        """Returns the combined commit status: 'success', 'pending', 'failure', or 'none'."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.base_url}/repos/{repo}/commits/{ref}/status",
+                headers=self._headers(),
+                timeout=15.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                total_count = data.get("total_count", 0)
+                if total_count == 0:
+                    return "none"
+                return data.get("state", "none")
+            return "none"
+
+    async def get_check_runs_status(self, repo: str, ref: str) -> tuple[str, list[str]]:
+        """Returns check runs status ('success', 'pending', 'failure', or 'none') and failing check names."""
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self.base_url}/repos/{repo}/commits/{ref}/check-runs",
+                headers=self._headers(),
+                timeout=15.0,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                runs = data.get("check_runs", [])
+                if not runs:
+                    return "none", []
+                failing: list[str] = []
+                has_pending = False
+                for r in runs:
+                    st = r.get("status")
+                    conclusion = r.get("conclusion")
+                    if st != "completed":
+                        has_pending = True
+                    elif conclusion not in ("success", "neutral", "skipped"):
+                        failing.append(r.get("name", "check"))
+                if failing:
+                    return "failure", failing
+                if has_pending:
+                    return "pending", []
+                return "success", []
+            return "none", []
+
+    async def wait_for_checks_to_pass(
+        self,
+        repo: str,
+        ref: str,
+        timeout_seconds: int = 180,
+        poll_interval: int = 5,
+    ) -> tuple[bool, str]:
+        """Polls commit statuses and check runs until they succeed, fail, or timeout."""
+        import asyncio
+
+        start = time.perf_counter()
+        while time.perf_counter() - start < timeout_seconds:
+            status = await self.get_combined_status(repo, ref)
+            check_status, failing = await self.get_check_runs_status(repo, ref)
+
+            if status == "failure" or check_status == "failure":
+                failing_names = ", ".join(failing) if failing else "commit status check"
+                return False, f"Check run failed ({failing_names})"
+
+            # If both are 'none', there are no GitHub Actions or status checks configured
+            if status in ("success", "none") and check_status in ("success", "none"):
+                return True, "All checks passed (or no checks configured)"
+
+            await asyncio.sleep(poll_interval)
+
+        return False, f"Timed out waiting for checks to complete after {timeout_seconds}s"

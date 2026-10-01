@@ -225,8 +225,9 @@ class AuthoringFlow:
                     await self.github_client.create_issue_comment(
                         repo,
                         pr.number,
-                        f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR and leave feedback. "
-                        f"When ready, leave a review or comment `/forge address` to trigger any requested modifications.",
+                        f"@{issue.author} The initial Mathlingua authoring is complete! Please review the PR.\n\n"
+                        f"- To request changes: comment `/forge address`\n"
+                        f"- To accept and merge: comment `/forge accept` (I will automatically run `mlg check`, self-heal any errors, wait for checks to pass, and merge into `main`)",
                     )
                 except Exception:
                     pass

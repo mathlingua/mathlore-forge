@@ -455,9 +455,21 @@ class CurationFlow:
                     body=(
                         f"@{issue_record.author} The approved plan has been implemented and submitted in PR #{pr.number} ({pr.html_url})!\n\n"
                         f"- **Live Agent Run**: [View Run on Mathlore Forge Dashboard]({dash_link})\n\n"
-                        f"Please review the pull request changes."
+                        f"Please review the pull request changes. You can comment `/forge accept` on the PR to validate and merge."
                     ),
                 )
+                try:
+                    await self.github_client.create_issue_comment(
+                        repo=repo,
+                        issue_or_pr_number=pr.number,
+                        body=(
+                            f"@{issue_record.author} The approved curation plan for issue #{issue_number} has been implemented.\n\n"
+                            f"- To request modifications: comment `/forge address`\n"
+                            f"- To accept and merge: comment `/forge accept` (I will validate via `mlg check`, resolve any compiler issues, wait for CI checks, and merge into `main`)"
+                        ),
+                    )
+                except Exception:
+                    pass
             except Exception as pr_err:
                 run_record.error_message = f"PR creation warning: {pr_err}"
                 run_record.status = RunStatus.AWAITING_REVIEW

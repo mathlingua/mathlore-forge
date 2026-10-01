@@ -59,3 +59,18 @@ def test_models_parsing():
     )
     assert comment.id == 123456
     assert comment.line == 18
+
+
+def test_pull_request_head_sha():
+    pr = GitHubPullRequest(
+        number=44,
+        title="[Forge] Test PR",
+        body="Resolves #42",
+        head_branch="forge/issue-42",
+        base_branch="main",
+        head_sha="abcdef123456",
+        state="open",
+        html_url="https://github.com/mathlingua/mathlore/pull/44",
+    )
+    assert pr.head_sha == "abcdef123456"
+

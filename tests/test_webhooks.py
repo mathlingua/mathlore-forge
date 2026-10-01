@@ -114,3 +114,58 @@ def test_slash_command_comment_triggers_review(client):
         data = resp.json()
         assert data["status"] == "accepted"
         assert data["workflow"] == "address_review_comments"
+
+
+def test_slash_command_forge_accept_on_pr(client):
+    payload = {
+        "action": "created",
+        "comment": {
+            "body": "/forge accept",
+            "user": {"login": "DominicKramer"},
+        },
+        "issue": {
+            "number": 56,
+            "pull_request": {"url": "https://api.github.com/repos/mathlingua/mathlore/pulls/56"},
+        },
+        "repository": {"full_name": "mathlingua/mathlore"},
+    }
+
+    with patch("mathlore_forge.web.routes.webhooks._run_flywheel_task") as mock_task:
+        resp = client.post(
+            "/webhooks/github",
+            json=payload,
+            headers={"X-GitHub-Event": "issue_comment"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "accepted"
+        assert data["workflow"] == "flywheel_and_merge"
+        assert data["pr"] == 56
+
+
+def test_slash_command_forge_accept_on_issue(client):
+    payload = {
+        "action": "created",
+        "comment": {
+            "body": "/forge accept",
+            "user": {"login": "DominicKramer"},
+        },
+        "issue": {
+            "number": 57,
+            "title": "Axioms of Set Theory",
+        },
+        "repository": {"full_name": "mathlingua/mathlore"},
+    }
+
+    with patch("mathlore_forge.web.routes.webhooks._run_curation_execution_task") as mock_task:
+        resp = client.post(
+            "/webhooks/github",
+            json=payload,
+            headers={"X-GitHub-Event": "issue_comment"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "accepted"
+        assert data["workflow"] == "curation_plan_execution"
+        assert data["issue"] == 57
+
