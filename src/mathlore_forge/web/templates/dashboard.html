@@ -441,15 +441,22 @@ function resetFilters() {
 
 function updatePillStyles() {
     const pills = document.querySelectorAll('.filter-pill');
+    const isLight = document.documentElement.classList.contains('light');
     pills.forEach(pill => {
         const filter = pill.getAttribute('data-filter');
         if (filter === currentStatusFilter) {
             pill.className = 'filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm';
         } else {
-            pill.className = 'filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700';
+            pill.className = isLight
+                ? 'filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-100 text-slate-600 hover:text-slate-900 hover:bg-slate-200 border border-slate-200'
+                : 'filter-pill px-3 py-1.5 rounded-lg font-medium transition flex items-center gap-1.5 bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700';
         }
     });
 }
+
+window.addEventListener('forge-theme-changed', () => {
+    updatePillStyles();
+});
 
 function applyFilters() {
     const rows = document.querySelectorAll('.run-row');
